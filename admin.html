@@ -46,6 +46,7 @@
     <div class="filters">
       <input id="search" type="search" placeholder="Нэр, утас, сургуулиар хайх" aria-label="Хайх">
       <select id="filterDay" aria-label="Өдрөөр шүүх"><option value="">Бүх өдөр</option></select>
+      <select id="filterGender" aria-label="Хүйсээр шүүх" hidden><option value="">Бүх хүйс</option></select>
     </div>
     <div id="adminMsg" hidden></div>
     <div class="cards" id="cards"></div>
@@ -84,6 +85,11 @@
         <div class="field"><label for="o_days">Ажиллах өдрүүд</label><textarea id="o_days" rows="7"></textarea></div>
         <div class="field"><label for="o_shifts">Ажиллах цаг</label><textarea id="o_shifts" rows="4"></textarea></div>
         <div class="field"><label for="o_types">«Та хэн бэ?» сонголтууд</label><textarea id="o_types" rows="5"></textarea></div>
+        <div class="grid2">
+          <div class="field"><label for="o_gmode">Хүйс асуух</label>
+            <select id="o_gmode"><option value="off">Асуухгүй</option><option value="optional">Асуух (заавал биш)</option><option value="required">Заавал асуух</option></select></div>
+          <div class="field"><label for="o_genders">Хүйсийн сонголтууд</label><textarea id="o_genders" rows="3"></textarea></div>
+        </div>
         <div class="row"><button type="submit" class="primary" id="optSave">Хадгалах</button><span id="optMsg" class="hint" role="status"></span></div>
       </form>
     </section>
@@ -159,6 +165,12 @@ function setOptions(o) {
   sel.length = 1;
   (options.days || DAY_FULL).forEach(d => sel.add(new Option(d, d)));
   sel.value = [...sel.options].some(x => x.value === keep) ? keep : "";
+  const gs = $("filterGender"), gkeep = gs.value;
+  gs.length = 1;
+  (options.genders || []).forEach(g => gs.add(new Option(g, g)));
+  gs.value = [...gs.options].some(x => x.value === gkeep) ? gkeep : "";
+  gs.hidden = !options.genderMode || options.genderMode === "off";
+  if (gs.hidden) gs.value = "";
 }
 setOptions();
 const shortDay = d => DAY_SHORT[DAY_FULL.indexOf(d)] || d.slice(0, 2);
@@ -244,10 +256,11 @@ function render() {
     st.append(b);
   });
 
-  const q = $("search").value.trim().toLowerCase(), day = $("filterDay").value;
+  const q = $("search").value.trim().toLowerCase(), day = $("filterDay").value, gender = $("filterGender").value;
   const list = rows.filter(r =>
     (!filterStatus || (r.status || "Шинэ") === filterStatus) &&
     (!day || (r.days || "").split(", ").includes(day)) &&
+    (!gender || r.gender === gender) &&
     (!q || [r.lastName, r.firstName, r.phone, r.email, r.school, r.major].join(" ").toLowerCase().includes(q)));
 
   const box = $("cards");
@@ -276,7 +289,7 @@ function card(r) {
 
   const head = el("div", "card-head");
   const who = el("div");
-  who.append(el("div", "name", `${r.lastName} ${r.firstName}`), el("div", "sub", (r.age ? r.age + " нас · " : "") + fmtDate(r.createdAt)));
+  who.append(el("div", "name", `${r.lastName} ${r.firstName}`), el("div", "sub", [r.age && r.age + " нас", r.gender, fmtDate(r.createdAt)].filter(Boolean).join(" · ")));
   head.append(who, el("span", "pill " + (STATUS_CLASS[status] || "s-new"), status));
   c.append(head);
 
@@ -350,6 +363,7 @@ function card(r) {
 
 $("search").oninput = render;
 $("filterDay").onchange = render;
+$("filterGender").onchange = render;
 $("refreshBtn").onclick = load;
 
 /* ---------- Тохиргоо ---------- */
@@ -378,6 +392,8 @@ async function loadSettings() {
     $("o_days").value = settings.days.join("\n");
     $("o_shifts").value = settings.shifts.join("\n");
     $("o_types").value = settings.types.join("\n");
+    $("o_gmode").value = settings.genderMode;
+    $("o_genders").value = settings.genders.join("\n");
     $("n_on").checked = settings.notify;
     $("n_email").value = settings.notifyEmail || "";
     $("n_email").placeholder = settings.ownerEmail || "";
@@ -397,7 +413,8 @@ async function saveSettings(patch, btn, out) {
   try {
     const next = { ...settings, ...patch };
     const r = await call("saveSettings", { settings: {
-      notify: next.notify, notifyEmail: next.notifyEmail, days: next.days, shifts: next.shifts, types: next.types
+      notify: next.notify, notifyEmail: next.notifyEmail, days: next.days, shifts: next.shifts, types: next.types,
+      genderMode: next.genderMode, genders: next.genders
     } });
     settings = { ...settings, ...r.settings, user: settings.user, ownerEmail: settings.ownerEmail };
     setOptions(settings);
@@ -411,7 +428,10 @@ async function saveSettings(patch, btn, out) {
 
 $("optForm").addEventListener("submit", e => {
   e.preventDefault();
-  saveSettings({ days: lines("o_days"), shifts: lines("o_shifts"), types: lines("o_types") }, $("optSave"), $("optMsg"));
+  saveSettings({
+    days: lines("o_days"), shifts: lines("o_shifts"), types: lines("o_types"),
+    genderMode: $("o_gmode").value, genders: lines("o_genders")
+  }, $("optSave"), $("optMsg"));
 });
 $("notifyForm").addEventListener("submit", e => {
   e.preventDefault();
@@ -450,9 +470,9 @@ function csvCell(v) {
   return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
 }
 $("csvBtn").onclick = () => {
-  const head = ["Овог", "Нэр", "Утас", "Имэйл", "Нас", "Төрөл", "Сургууль", "Мэргэжил/курс", "Өдрүүд", "Цаг", "Туршлага", "Тэмдэглэл", "Төлөв", "Бүртгүүлсэн"];
+  const head = ["Овог", "Нэр", "Утас", "Имэйл", "Нас", "Хүйс", "Төрөл", "Сургууль", "Мэргэжил/курс", "Өдрүүд", "Цаг", "Туршлага", "Тэмдэглэл", "Төлөв", "Бүртгүүлсэн"];
   const lines = [head.join(",")].concat(rows.map(r =>
-    [r.lastName, r.firstName, r.phone, r.email, r.age, r.type, r.school, r.major, r.days, r.shifts, r.experience, r.note, r.status, fmtDate(r.createdAt)].map(csvCell).join(",")));
+    [r.lastName, r.firstName, r.phone, r.email, r.age, r.gender, r.type, r.school, r.major, r.days, r.shifts, r.experience, r.note, r.status, fmtDate(r.createdAt)].map(csvCell).join(",")));
   const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);

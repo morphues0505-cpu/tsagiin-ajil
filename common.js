@@ -43,11 +43,11 @@ function fmtDate(t) {
   return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-function chips(box, items, name) {
+function chips(box, items, name, type) {
   items.forEach((t, i) => {
     const l = document.createElement("label");
     l.className = "chip";
-    l.innerHTML = `<input type="checkbox" id="${name}_${i}"><span></span>`;
+    l.innerHTML = `<input type="${type || "checkbox"}" name="${name}" id="${name}_${i}"><span></span>`;
     l.querySelector("input").value = t;
     l.querySelector("span").textContent = t;
     box.appendChild(l);

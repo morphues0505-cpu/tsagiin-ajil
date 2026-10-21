@@ -39,6 +39,10 @@
           <div class="field"><label for="f_age" class="req">Нас</label><input id="f_age" type="text" inputmode="numeric" maxlength="2" placeholder="20"></div>
           <div class="field"><label for="f_type" class="req">Та хэн бэ?</label><select id="f_type"><option value="">Сонгоно уу</option></select></div>
         </div>
+        <div class="field" id="genderField" hidden>
+          <span class="lbl" id="genderLbl">Хүйс</span>
+          <div class="chips" id="genderChips" role="radiogroup" aria-labelledby="genderLbl"></div>
+        </div>
         <div class="grid2">
           <div class="field"><label for="f_school">Сургууль</label><input id="f_school" type="text" placeholder="МУИС, ШУТИС…" maxlength="100"></div>
           <div class="field"><label for="f_major">Мэргэжил, курс</label><input id="f_major" type="text" placeholder="Нягтлан бодох, 2-р курс" maxlength="100"></div>
@@ -78,7 +82,13 @@ function renderOptions(o) {
   chips($("dayChips"), o.days || DAY_FULL, "day");
   chips($("shiftChips"), o.shifts || SHIFTS, "shift");
   (o.types || TYPES).forEach(t => $("f_type").add(new Option(t, t)));
+  genderMode = o.genderMode || "off";
+  $("genderChips").textContent = "";
+  chips($("genderChips"), o.genders || [], "gender", "radio");
+  $("genderField").hidden = genderMode === "off";
+  $("genderLbl").classList.toggle("req", genderMode === "required");
 }
+let genderMode = "off";
 const checked = box => [...box.querySelectorAll("input:checked")].map(i => i.value);
 
 function renderJob(job) {
@@ -109,7 +119,8 @@ $("form").addEventListener("submit", async e => {
     phone: $("f_phone").value.trim(), email: $("f_email").value.trim(), age: $("f_age").value.trim(),
     type: $("f_type").value, school: $("f_school").value.trim(), major: $("f_major").value.trim(),
     days: checked($("dayChips")), shifts: checked($("shiftChips")),
-    experience: $("f_exp").value.trim(), note: $("f_note").value.trim(), website: $("f_web").value
+    experience: $("f_exp").value.trim(), note: $("f_note").value.trim(), website: $("f_web").value,
+    gender: (checked($("genderChips"))[0] || "")
   };
   const miss = [];
   if (!d.lastName) miss.push("овог");
@@ -117,6 +128,7 @@ $("form").addEventListener("submit", async e => {
   if (d.phone.replace(/\D/g, "").length < 8) miss.push("утас (8 оронтой)");
   if (!/^\d{1,2}$/.test(d.age)) miss.push("нас");
   if (!d.type) miss.push("та хэн бэ");
+  if (genderMode === "required" && !d.gender) miss.push("хүйс");
   if (!d.days.length) miss.push("өдөр");
   if (!d.shifts.length) miss.push("цаг");
   if (d.email && !/^\S+@\S+\.\S+$/.test(d.email)) miss.push("имэйл зөв биш");

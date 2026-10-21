@@ -15,12 +15,14 @@ const COLS = [
   ['id', 'id'], ['createdAt', 'Бүртгүүлсэн'], ['updatedAt', 'Зассан'], ['status', 'Төлөв'],
   ['lastName', 'Овог'], ['firstName', 'Нэр'], ['phone', 'Утас'], ['email', 'Имэйл'], ['age', 'Нас'],
   ['type', 'Төрөл'], ['school', 'Сургууль'], ['major', 'Мэргэжил, курс'], ['days', 'Өдрүүд'], ['shifts', 'Цаг'],
-  ['experience', 'Туршлага'], ['note', 'Тэмдэглэл']
+  ['experience', 'Туршлага'], ['note', 'Тэмдэглэл'], ['gender', 'Хүйс']
 ];
 const KEYS = COLS.map(c => c[0]);
 const DAYS = ['Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба', 'Ням'];
 const SHIFTS = ['Өглөө (08–12)', 'Өдөр (12–17)', 'Орой (17–22)'];
 const TYPES = ['Их, дээд сургуулийн оюутан', 'Коллеж, МСҮТ-ийн сурагч', 'Ахлах ангийн сурагч', 'Төгссөн / ажил хайж буй', 'Бусад'];
+const GENDERS = ['Эрэгтэй', 'Эмэгтэй'];
+const GENDER_MODES = ['off', 'optional', 'required'];
 const STATUSES = ['Шинэ', 'Холбогдсон', 'Ажилд авсан', 'Татгалзсан'];
 const TOKEN_DAYS = 30;
 const RESERVED = ['NOTIFY_EMAIL', 'ADMIN_URL', 'TOKEN_SECRET', 'JOB', 'CONFIG'];
@@ -41,7 +43,7 @@ function doGet() {
 
 function public_() {
   const c = config_();
-  return { ok: true, job: job_(), options: { days: c.days, shifts: c.shifts, types: c.types } };
+  return { ok: true, job: job_(), options: { days: c.days, shifts: c.shifts, types: c.types, genderMode: c.genderMode, genders: c.genders } };
 }
 
 function doPost(e) {
@@ -81,7 +83,8 @@ function apply_(d) {
     type: c.types.indexOf(d.type) >= 0 ? d.type : '',
     school: clean_(d.school, 100), major: clean_(d.major, 100),
     days: pick_(d.days, c.days), shifts: pick_(d.shifts, c.shifts),
-    experience: clean_(d.experience, 800), note: clean_(d.note, 800)
+    experience: clean_(d.experience, 800), note: clean_(d.note, 800),
+    gender: c.genderMode !== 'off' && c.genders.indexOf(d.gender) >= 0 ? d.gender : ''
   };
   const miss = [];
   if (!a.lastName) miss.push('овог');
@@ -89,6 +92,7 @@ function apply_(d) {
   if (a.phone.replace(/\D/g, '').length < 8) miss.push('утас (8 оронтой)');
   if (!/^\d{1,2}$/.test(a.age)) miss.push('нас');
   if (!a.type) miss.push('та хэн бэ');
+  if (c.genderMode === 'required' && !a.gender) miss.push('хүйс');
   if (!a.days) miss.push('өдөр');
   if (!a.shifts) miss.push('цаг');
   if (a.email && !/^\S+@\S+\.\S+$/.test(a.email)) miss.push('имэйл зөв биш');
@@ -124,7 +128,7 @@ function notify_(a) {
   if (!to) return;
   const url = p.getProperty('ADMIN_URL');
   const body = [
-    a.lastName + ' ' + a.firstName + ' (' + a.age + ' нас)',
+    a.lastName + ' ' + a.firstName + ' (' + a.age + ' нас' + (a.gender ? ', ' + a.gender : '') + ')',
     'Утас: ' + a.phone,
     a.email && 'Имэйл: ' + a.email,
     a.type + (a.school ? ' · ' + a.school : '') + (a.major ? ' · ' + a.major : ''),
@@ -251,7 +255,9 @@ function config_() {
     notifyEmail: c.notifyEmail !== undefined ? c.notifyEmail : (legacy && legacy !== 'off' ? legacy : ''),
     days: c.days && c.days.length ? c.days : DAYS,
     shifts: c.shifts && c.shifts.length ? c.shifts : SHIFTS,
-    types: c.types && c.types.length ? c.types : TYPES
+    types: c.types && c.types.length ? c.types : TYPES,
+    genderMode: GENDER_MODES.indexOf(c.genderMode) >= 0 ? c.genderMode : 'optional',
+    genders: c.genders && c.genders.length ? c.genders : GENDERS
   };
 }
 
@@ -279,7 +285,9 @@ function saveSettings_(s) {
   if (email && !/^\S+@\S+\.\S+$/.test(email)) throw fail_('invalid', 'Имэйл хаяг буруу байна.');
   const c = {
     notify: s.notify === true, notifyEmail: email,
-    days: list(s.days, 'Өдрүүд', true), shifts: list(s.shifts, 'Цаг', true), types: list(s.types, '"Та хэн бэ" сонголт')
+    days: list(s.days, 'Өдрүүд', true), shifts: list(s.shifts, 'Цаг', true), types: list(s.types, '"Та хэн бэ" сонголт'),
+    genderMode: GENDER_MODES.indexOf(s.genderMode) >= 0 ? s.genderMode : 'optional',
+    genders: list(s.genders, 'Хүйсийн сонголт')
   };
   props_().setProperty('CONFIG', JSON.stringify(c));
   return getSettings_('');
@@ -305,6 +313,10 @@ function sheet_() {
     sh.setFrozenRows(1);
     sh.getRange(1, 1, 1, COLS.length).setFontWeight('bold');
     sh.hideColumns(1);
+  } else if (sh.getLastColumn() < COLS.length) {
+    const from = sh.getLastColumn() + 1;
+    sh.getRange(1, from, 1, COLS.length - from + 1)
+      .setValues([COLS.slice(from - 1).map(c => c[1])]).setFontWeight('bold');
   }
   return sh;
 }
