@@ -7,6 +7,9 @@
  *   ADMIN_URL       сонголттой. Мэдэгдэл имэйлд оруулах dashboard линк.
  */
 
+// Script нь Sheet-ээс тусдаа (script.google.com дээр) үүссэн бол Sheet-ийн ID-г энд тавина.
+// Sheet-ийн Extensions → Apps Script-ээр үүсгэсэн бол хоосон үлдээнэ.
+const SPREADSHEET_ID = '1UnM0vId0e1R1_pNm5zY1L_NJQB3C4xItt15kzBZ_qBg';
 const SHEET_NAME = 'Бүртгэл';
 const COLS = [
   ['id', 'id'], ['createdAt', 'Бүртгүүлсэн'], ['updatedAt', 'Зассан'], ['status', 'Төлөв'],
@@ -208,7 +211,7 @@ function saveJob_(j) {
 /* ---------- Туслах ---------- */
 
 function sheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) {
     sh = ss.insertSheet(SHEET_NAME);
