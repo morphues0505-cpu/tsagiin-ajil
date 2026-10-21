@@ -1,5 +1,5 @@
 // Админ апп-ын бүрхүүлийг кэшлэнэ. Өгөгдөл (Apps Script) кэшлэхгүй.
-const CACHE = "tsa-admin-v7";
+const CACHE = "tsa-admin-v9";
 const SHELL = ["admin.html", "style.css", "common.js", "config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", e => {

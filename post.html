@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ажлын зар байршуулах</title>
+<meta name="description" content="Оюутнуудад цагийн ажлын зар байршуулах">
+<meta name="theme-color" content="#1D5FAA">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Rubik:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css?v=8">
+</head>
+<body>
+<main class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Байгууллагуудад</div>
+    <h1>Ажлын зар байршуулах</h1>
+    <p class="desc">Оюутнуудад цагийн ажлын зараа үнэгүй байршуулаарай. Зар тань шалгагдсаны дараа самбарт гарна. Оюутнуудын анкет таны имэйл рүү шууд ирнэ.</p>
+    <a class="hint" href="./">← Зарын самбар руу</a>
+  </header>
+
+  <div id="status" class="note info" hidden></div>
+
+  <section class="panel" id="formPanel">
+    <form id="form" novalidate>
+      <div style="display:grid;gap:16px">
+        <h2>Ажлын мэдээлэл</h2>
+        <div class="grid2">
+          <div class="field"><label for="p_org" class="req">Байгууллагын нэр</label><input id="p_org" type="text" autocomplete="organization" maxlength="100"></div>
+          <div class="field"><label for="p_title" class="req">Албан тушаал</label><input id="p_title" type="text" maxlength="100" placeholder="Зөөгч, кассчин, бариста…"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label for="p_place" class="req">Байршил</label><input id="p_place" type="text" maxlength="100" placeholder="СБД, 1-р хороо"></div>
+          <div class="field"><label for="p_pay" class="req">Цалин</label><input id="p_pay" type="text" maxlength="60" placeholder="Цагт 9,000₮"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label for="p_schedule">Ажлын цаг</label><input id="p_schedule" type="text" maxlength="120" placeholder="Даваа–Баасан 18–22"></div>
+          <div class="field"><label for="p_deadline">Зар хаагдах</label><input id="p_deadline" type="text" maxlength="60" placeholder="12 сарын 1"></div>
+        </div>
+        <div class="field"><label for="p_desc" class="req">Тайлбар</label><textarea id="p_desc" maxlength="2000" rows="5" placeholder="Гүйцэтгэх ажил, тавигдах шаардлага, давуу тал…"></textarea></div>
+
+        <h2 style="margin-top:6px">Холбоо барих</h2>
+        <p class="hint" style="margin:0">Энэ мэдээлэл самбарт харагдахгүй. Оюутнуудын анкет доорх имэйл рүү ирнэ.</p>
+        <div class="grid2">
+          <div class="field"><label for="p_name" class="req">Холбогдох хүн</label><input id="p_name" type="text" autocomplete="name" maxlength="60"></div>
+          <div class="field"><label for="p_phone" class="req">Утас</label><input id="p_phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="9911 2233"></div>
+        </div>
+        <div class="field"><label for="p_email" class="req">Анкет хүлээн авах имэйл</label><input id="p_email" type="email" autocomplete="email" maxlength="100" placeholder="hr@company.mn"></div>
+        <div class="trap" aria-hidden="true"><label for="p_web">Website</label><input id="p_web" type="text" tabindex="-1" autocomplete="off"></div>
+        <div id="formMsg" hidden></div>
+        <div class="row"><button type="submit" class="primary" id="submitBtn">Зар илгээх</button></div>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel" id="donePanel" hidden>
+    <h2>Зар тань илгээгдлээ</h2>
+    <p style="margin:0">Бид шалгаад удахгүй самбарт нийтэлнэ. Нийтлэгдэхэд таны имэйл рүү мэдэгдэл очно.</p>
+    <div class="row"><button type="button" class="ghost" id="againBtn">Өөр зар илгээх</button><a class="btn ghost" href="./">Самбар үзэх</a></div>
+  </section>
+</main>
+
+<script src="config.js?v=8"></script>
+<script src="common.js?v=8"></script>
+<script>
+const v = id => $(id).value.trim();
+
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const d = {
+    org: v("p_org"), title: v("p_title"), place: v("p_place"), pay: v("p_pay"),
+    schedule: v("p_schedule"), deadline: v("p_deadline"), desc: v("p_desc"),
+    contactName: v("p_name"), contactPhone: v("p_phone"), contactEmail: v("p_email"), website: $("p_web").value
+  };
+  const miss = [];
+  if (!d.org) miss.push("байгууллагын нэр");
+  if (!d.title) miss.push("албан тушаал");
+  if (!d.place) miss.push("байршил");
+  if (!d.pay) miss.push("цалин");
+  if (!d.desc) miss.push("тайлбар");
+  if (!d.contactName) miss.push("холбогдох хүн");
+  if (d.contactPhone.replace(/\D/g, "").length < 8) miss.push("утас (8 оронтой)");
+  if (!/^\S+@\S+\.\S+$/.test(d.contactEmail)) miss.push("имэйл");
+  if (miss.length) { msg($("formMsg"), "Дараахыг бөглөнө үү: " + miss.join(", "), "err"); return; }
+
+  const btn = $("submitBtn");
+  btn.disabled = true;
+  btn.textContent = "Илгээж байна…";
+  try {
+    await api("postJob", { data: d });
+    msg($("formMsg"), "");
+    $("formPanel").hidden = true;
+    $("donePanel").hidden = false;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (err) {
+    msg($("formMsg"), err.message || "Илгээж чадсангүй. Дахин оролдоно уу.", "err");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Зар илгээх";
+  }
+});
+
+// Байгууллагын холбоо барих мэдээллийг үлдээж, ажлын хэсгийг цэвэрлэнэ.
+$("againBtn").onclick = () => {
+  ["p_title", "p_pay", "p_schedule", "p_deadline", "p_desc"].forEach(id => { $(id).value = ""; });
+  $("donePanel").hidden = true;
+  $("formPanel").hidden = false;
+  $("p_title").focus();
+};
+
+(async () => {
+  if (!apiReady()) { msg($("status"), "Тохиргоо дутуу: config.js-д API_URL оруулна уу.", "err"); return; }
+  try {
+    const r = await api("board");
+    if (r.job && r.job.postsOpen === false) {
+      msg($("status"), "Одоогоор шинэ зар хүлээж авахгүй байна.", "info");
+      $("formPanel").hidden = true;
+    }
+  } catch (err) { /* маягтыг харуулсаар байна, илгээхэд алдаа гарвал тэнд мэдэгдэнэ */ }
+})();
+</script>
+</body>
+</html>

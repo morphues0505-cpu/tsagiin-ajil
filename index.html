@@ -3,27 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Цагийн ажлын анкет</title>
-<meta name="description" content="Оюутнуудад зориулсан цагийн ажлын анкет">
+<title>Оюутны цагийн ажил</title>
+<meta name="description" content="Оюутнуудад зориулсан цагийн ажлын зарууд">
 <meta name="theme-color" content="#1D5FAA">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Rubik:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 <main class="wrap">
   <header class="hero">
-    <div class="eyebrow">Цагийн ажлын анкет</div>
-    <h1 id="jobTitle">Цагийн ажилтан авна</h1>
-    <div class="facts" id="facts"></div>
-    <p class="desc" id="jobDesc">Оюутнуудад тохирсон уян хатан цагийн ажил. Доорх анкетыг бөглөж бүртгүүлнэ үү, бид тантай холбогдоно.</p>
+    <div class="eyebrow">Цагийн ажлын самбар</div>
+    <h1 id="siteTitle">Оюутны цагийн ажил</h1>
+    <p class="desc" id="siteDesc">Оюутнуудад зориулсан цагийн ажлын зарууд. Зараа сонгоод анкетаа илгээгээрэй, анкет тань тухайн байгууллагад шууд очно.</p>
+    <a class="hint" href="post.html" id="postCta">Байгууллага уу? Ажлын зар байршуулах →</a>
   </header>
 
   <div id="status" class="note info">Ачааллаж байна…</div>
 
+  <section id="boardView" hidden>
+    <div class="jobs" id="jobs"></div>
+  </section>
+
   <section class="panel" id="formPanel" hidden>
+    <button type="button" class="ghost small" id="backBtn" style="justify-self:start">← Бүх зар</button>
+    <div class="chosen" id="chosen"></div>
     <h2>Анкет бөглөх</h2>
     <form id="form" novalidate>
       <div style="display:grid;gap:16px">
@@ -57,23 +63,27 @@
         </div>
         <div class="field"><label for="f_exp">Ажлын туршлага</label><textarea id="f_exp" maxlength="800" placeholder="Өмнө нь хаана, ямар ажил хийж байсан бэ? Байхгүй бол хоосон үлдээнэ үү."></textarea></div>
         <div class="field"><label for="f_note">Нэмэлт мэдээлэл</label><textarea id="f_note" maxlength="800" placeholder="Хэзээнээс эхлэх боломжтой, асуух зүйл гэх мэт"></textarea></div>
+        <label class="consent"><input type="checkbox" id="f_consent"> <span id="consentText">Миний мэдээллийг энэ байгууллагад илгээхийг зөвшөөрч байна.</span></label>
         <div class="trap" aria-hidden="true"><label for="f_web">Website</label><input id="f_web" type="text" tabindex="-1" autocomplete="off"></div>
         <div id="formMsg" hidden></div>
-        <div class="row"><button type="submit" class="primary" id="submitBtn">Бүртгүүлэх</button></div>
+        <div class="row"><button type="submit" class="primary" id="submitBtn">Анкет илгээх</button></div>
       </div>
     </form>
   </section>
 
   <section class="panel" id="donePanel" hidden>
-    <h2 id="doneTitle">Анкет амжилттай илгээгдлээ</h2>
-    <p style="margin:0">Бид тантай утсаар холбогдоно. Мэдээллээ засах бол ижил утасны дугаараар дахин бөглөхөд хуучин анкет шинэчлэгдэнэ.</p>
-    <div class="row"><button type="button" class="ghost" id="againBtn">Дахин бөглөх</button></div>
+    <h2 id="doneTitle">Анкет илгээгдлээ</h2>
+    <p style="margin:0" id="doneText"></p>
+    <div class="row"><button type="button" class="primary" id="againBtn">Өөр зар үзэх</button></div>
   </section>
 </main>
 
-<script src="config.js?v=7"></script>
-<script src="common.js?v=7"></script>
+<script src="config.js?v=8"></script>
+<script src="common.js?v=8"></script>
 <script>
+let jobs = [], current = null, genderMode = "off", site = {};
+const checked = box => [...box.querySelectorAll("input:checked")].map(i => i.value);
+
 function renderOptions(o) {
   o = o || {};
   $("dayChips").textContent = "";
@@ -88,39 +98,86 @@ function renderOptions(o) {
   $("genderField").hidden = genderMode === "off";
   $("genderLbl").classList.toggle("req", genderMode === "required");
 }
-let genderMode = "off";
-const checked = box => [...box.querySelectorAll("input:checked")].map(i => i.value);
 
-function renderJob(job) {
-  if (job.title) $("jobTitle").textContent = job.title;
-  if (job.desc) $("jobDesc").textContent = job.desc;
-  if (job.title) document.title = job.title;
-  const f = $("facts");
-  f.textContent = "";
-  [["Байгууллага", job.org], ["Байршил", job.place], ["Цалин", job.pay], ["Хаагдах", job.deadline]].forEach(([k, v]) => {
+function node(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function meta(job) {
+  const m = node("div", "meta");
+  [["Байршил", job.place], ["Цалин", job.pay], ["Цаг", job.schedule], ["Хаагдах", job.deadline]].forEach(([k, v]) => {
     if (!v) return;
-    const s = document.createElement("span"), b = document.createElement("b");
-    b.textContent = v;
+    const s = node("span"), b = node("b", null, v);
     s.append(k + ": ", b);
-    f.append(s);
+    m.append(s);
   });
-  if (job.closed) {
-    msg($("status"), "Бүртгэл хаагдсан байна. Баярлалаа!", "info");
+  return m;
+}
+
+function renderBoard() {
+  const box = $("jobs");
+  box.textContent = "";
+  if (!jobs.length) {
+    box.append(node("div", "empty", "Одоогоор нээлттэй зар алга. Дараа дахин шалгаарай."));
     return;
   }
-  $("status").hidden = true;
-  $("formPanel").hidden = false;
+  jobs.forEach(j => {
+    const a = node("article", "job");
+    a.append(node("div", "org", j.org), node("h3", null, j.title), meta(j));
+    const det = node("details");
+    det.append(node("summary", null, "Дэлгэрэнгүй"), node("p", "desc", j.desc));
+    a.append(det);
+    const b = node("button", "primary", "Анкет илгээх");
+    b.type = "button";
+    b.style.justifySelf = "start";
+    b.onclick = () => { location.hash = "job=" + j.id; };
+    a.append(b);
+    box.append(a);
+  });
 }
+
+// #job=<id> линкээр шууд тухайн зарын анкет нээгдэнэ (админ "Линк хуулах"-аар тараана).
+function route() {
+  const m = location.hash.match(/job=([\w-]+)/);
+  current = m ? jobs.find(j => j.id === m[1]) || null : null;
+  $("donePanel").hidden = true;
+  if (m && !current) {
+    msg($("status"), "Энэ зар хаагдсан эсвэл олдсонгүй. Доорх нээлттэй заруудаас сонгоно уу.", "info");
+  } else if (site.closed) {
+    msg($("status"), "Анкет хүлээж авахыг түр зогсоосон байна.", "info");
+  } else {
+    $("status").hidden = true;
+  }
+  $("boardView").hidden = !!current;
+  $("formPanel").hidden = !current || site.closed;
+  if (current) {
+    const c = $("chosen");
+    c.textContent = "";
+    c.append(node("div", "org", current.org), node("strong", null, current.title), meta(current));
+    $("consentText").textContent = `Миний мэдээллийг «${current.org}»-д илгээхийг зөвшөөрч байна.`;
+    $("f_consent").checked = false;
+    msg($("formMsg"), "");
+  }
+  window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", route);
+$("backBtn").onclick = () => { location.hash = ""; };
+$("againBtn").onclick = () => { location.hash = ""; route(); };
 
 $("form").addEventListener("submit", async e => {
   e.preventDefault();
+  if (!current) return;
   const d = {
+    jobId: current.id,
     lastName: $("f_last").value.trim(), firstName: $("f_first").value.trim(),
     phone: $("f_phone").value.trim(), email: $("f_email").value.trim(), age: $("f_age").value.trim(),
     type: $("f_type").value, school: $("f_school").value.trim(), major: $("f_major").value.trim(),
     days: checked($("dayChips")), shifts: checked($("shiftChips")),
     experience: $("f_exp").value.trim(), note: $("f_note").value.trim(), website: $("f_web").value,
-    gender: (checked($("genderChips"))[0] || "")
+    gender: checked($("genderChips"))[0] || "", consent: $("f_consent").checked
   };
   const miss = [];
   if (!d.lastName) miss.push("овог");
@@ -133,43 +190,46 @@ $("form").addEventListener("submit", async e => {
   if (!d.shifts.length) miss.push("цаг");
   if (d.email && !/^\S+@\S+\.\S+$/.test(d.email)) miss.push("имэйл зөв биш");
   if (miss.length) { msg($("formMsg"), "Дараахыг бөглөнө үү: " + miss.join(", "), "err"); return; }
+  if (!d.consent) { msg($("formMsg"), "Мэдээллээ байгууллагад илгээхийг зөвшөөрнө үү.", "err"); return; }
 
   const btn = $("submitBtn");
   btn.disabled = true;
   btn.textContent = "Илгээж байна…";
   try {
     const r = await api("apply", { data: d });
-    $("doneTitle").textContent = r.updated ? "Анкет тань шинэчлэгдлээ" : "Анкет амжилттай илгээгдлээ";
+    $("doneTitle").textContent = r.updated ? "Анкет тань шинэчлэгдлээ" : "Анкет илгээгдлээ";
+    $("doneText").textContent = `«${current.org}» таны анкетыг хүлээн авлаа. Тэд тантай утсаар холбогдоно. Бөглөсөн мэдээлэл тань хадгалагдсан тул өөр зарт хурдан илгээж болно.`;
     msg($("formMsg"), "");
     $("formPanel").hidden = true;
     $("donePanel").hidden = false;
     window.scrollTo({ top: 0, behavior: "smooth" });
   } catch (err) {
-    if (err.code === "closed") { $("formPanel").hidden = true; msg($("status"), err.message, "info"); }
+    if (err.code === "closed") { msg($("formMsg"), err.message, "info"); load(); }
     else msg($("formMsg"), err.message || "Илгээж чадсангүй. Дахин оролдоно уу.", "err");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Бүртгүүлэх";
+    btn.textContent = "Анкет илгээх";
   }
 });
 
-$("againBtn").onclick = () => {
-  $("form").reset();
-  $("donePanel").hidden = true;
-  $("formPanel").hidden = false;
-  $("f_last").focus();
-};
-
-(async () => {
-  if (!apiReady()) { msg($("status"), "Тохиргоо дутуу: config.js-д API_URL оруулна уу.", "err"); return; }
+async function load() {
   try {
-    const r = await api("job");
+    const r = await api("board");
+    site = r.job || {};
+    if (site.title) { $("siteTitle").textContent = site.title; document.title = site.title; }
+    if (site.desc) $("siteDesc").textContent = site.desc;
+    $("postCta").hidden = site.postsOpen === false;
     renderOptions(r.options);
-    renderJob(r.job || {});
+    jobs = r.jobs || [];
+    renderBoard();
+    route();
   } catch (err) {
     msg($("status"), "Ачаалж чадсангүй. " + err.message, "err");
   }
-})();
+}
+
+if (!apiReady()) msg($("status"), "Тохиргоо дутуу: config.js-д API_URL оруулна уу.", "err");
+else load();
 </script>
 </body>
 </html>
