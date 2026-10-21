@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Цагийн ажлын анкет</title>
+<meta name="description" content="Оюутнуудад зориулсан цагийн ажлын анкет">
+<meta name="theme-color" content="#1D5FAA">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Rubik:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Цагийн ажлын анкет</div>
+    <h1 id="jobTitle">Цагийн ажилтан авна</h1>
+    <div class="facts" id="facts"></div>
+    <p class="desc" id="jobDesc">Оюутнуудад тохирсон уян хатан цагийн ажил. Доорх анкетыг бөглөж бүртгүүлнэ үү, бид тантай холбогдоно.</p>
+  </header>
+
+  <div id="status" class="note info">Ачааллаж байна…</div>
+
+  <section class="panel" id="formPanel" hidden>
+    <h2>Анкет бөглөх</h2>
+    <form id="form" novalidate>
+      <div style="display:grid;gap:16px">
+        <div class="grid2">
+          <div class="field"><label for="f_last" class="req">Овог</label><input id="f_last" type="text" autocomplete="family-name" maxlength="60"></div>
+          <div class="field"><label for="f_first" class="req">Нэр</label><input id="f_first" type="text" autocomplete="given-name" maxlength="60"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label for="f_phone" class="req">Утас</label><input id="f_phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="9911 2233" maxlength="20"></div>
+          <div class="field"><label for="f_email">Имэйл</label><input id="f_email" type="email" autocomplete="email" maxlength="100"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label for="f_age" class="req">Нас</label><input id="f_age" type="text" inputmode="numeric" maxlength="2" placeholder="20"></div>
+          <div class="field"><label for="f_type" class="req">Та хэн бэ?</label><select id="f_type"><option value="">Сонгоно уу</option></select></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label for="f_school">Сургууль</label><input id="f_school" type="text" placeholder="МУИС, ШУТИС…" maxlength="100"></div>
+          <div class="field"><label for="f_major">Мэргэжил, курс</label><input id="f_major" type="text" placeholder="Нягтлан бодох, 2-р курс" maxlength="100"></div>
+        </div>
+        <div class="field">
+          <span class="lbl req">Ажиллах боломжтой өдрүүд</span>
+          <div class="chips" id="dayChips"></div>
+        </div>
+        <div class="field">
+          <span class="lbl req">Ажиллах боломжтой цаг</span>
+          <div class="chips" id="shiftChips"></div>
+        </div>
+        <div class="field"><label for="f_exp">Ажлын туршлага</label><textarea id="f_exp" maxlength="800" placeholder="Өмнө нь хаана, ямар ажил хийж байсан бэ? Байхгүй бол хоосон үлдээнэ үү."></textarea></div>
+        <div class="field"><label for="f_note">Нэмэлт мэдээлэл</label><textarea id="f_note" maxlength="800" placeholder="Хэзээнээс эхлэх боломжтой, асуух зүйл гэх мэт"></textarea></div>
+        <div class="trap" aria-hidden="true"><label for="f_web">Website</label><input id="f_web" type="text" tabindex="-1" autocomplete="off"></div>
+        <div id="formMsg" hidden></div>
+        <div class="row"><button type="submit" class="primary" id="submitBtn">Бүртгүүлэх</button></div>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel" id="donePanel" hidden>
+    <h2 id="doneTitle">Анкет амжилттай илгээгдлээ</h2>
+    <p style="margin:0">Бид тантай утсаар холбогдоно. Мэдээллээ засах бол ижил утасны дугаараар дахин бөглөхөд хуучин анкет шинэчлэгдэнэ.</p>
+    <div class="row"><button type="button" class="ghost" id="againBtn">Дахин бөглөх</button></div>
+  </section>
+</main>
+
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+chips($("dayChips"), DAY_FULL, "day");
+chips($("shiftChips"), SHIFTS, "shift");
+TYPES.forEach(t => $("f_type").add(new Option(t, t)));
+const checked = box => [...box.querySelectorAll("input:checked")].map(i => i.value);
+
+function renderJob(job) {
+  if (job.title) $("jobTitle").textContent = job.title;
+  if (job.desc) $("jobDesc").textContent = job.desc;
+  if (job.title) document.title = job.title;
+  const f = $("facts");
+  f.textContent = "";
+  [["Байгууллага", job.org], ["Байршил", job.place], ["Цалин", job.pay], ["Хаагдах", job.deadline]].forEach(([k, v]) => {
+    if (!v) return;
+    const s = document.createElement("span"), b = document.createElement("b");
+    b.textContent = v;
+    s.append(k + ": ", b);
+    f.append(s);
+  });
+  if (job.closed) {
+    msg($("status"), "Бүртгэл хаагдсан байна. Баярлалаа!", "info");
+    return;
+  }
+  $("status").hidden = true;
+  $("formPanel").hidden = false;
+}
+
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const d = {
+    lastName: $("f_last").value.trim(), firstName: $("f_first").value.trim(),
+    phone: $("f_phone").value.trim(), email: $("f_email").value.trim(), age: $("f_age").value.trim(),
+    type: $("f_type").value, school: $("f_school").value.trim(), major: $("f_major").value.trim(),
+    days: checked($("dayChips")), shifts: checked($("shiftChips")),
+    experience: $("f_exp").value.trim(), note: $("f_note").value.trim(), website: $("f_web").value
+  };
+  const miss = [];
+  if (!d.lastName) miss.push("овог");
+  if (!d.firstName) miss.push("нэр");
+  if (d.phone.replace(/\D/g, "").length < 8) miss.push("утас (8 оронтой)");
+  if (!/^\d{1,2}$/.test(d.age)) miss.push("нас");
+  if (!d.type) miss.push("та хэн бэ");
+  if (!d.days.length) miss.push("өдөр");
+  if (!d.shifts.length) miss.push("цаг");
+  if (d.email && !/^\S+@\S+\.\S+$/.test(d.email)) miss.push("имэйл зөв биш");
+  if (miss.length) { msg($("formMsg"), "Дараахыг бөглөнө үү: " + miss.join(", "), "err"); return; }
+
+  const btn = $("submitBtn");
+  btn.disabled = true;
+  btn.textContent = "Илгээж байна…";
+  try {
+    const r = await api("apply", { data: d });
+    $("doneTitle").textContent = r.updated ? "Анкет тань шинэчлэгдлээ" : "Анкет амжилттай илгээгдлээ";
+    msg($("formMsg"), "");
+    $("formPanel").hidden = true;
+    $("donePanel").hidden = false;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (err) {
+    if (err.code === "closed") { $("formPanel").hidden = true; msg($("status"), err.message, "info"); }
+    else msg($("formMsg"), err.message || "Илгээж чадсангүй. Дахин оролдоно уу.", "err");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Бүртгүүлэх";
+  }
+});
+
+$("againBtn").onclick = () => {
+  $("form").reset();
+  $("donePanel").hidden = true;
+  $("formPanel").hidden = false;
+  $("f_last").focus();
+};
+
+(async () => {
+  if (!apiReady()) { msg($("status"), "Тохиргоо дутуу: config.js-д API_URL оруулна уу.", "err"); return; }
+  try {
+    renderJob((await api("job")).job || {});
+  } catch (err) {
+    msg($("status"), "Ачаалж чадсангүй. " + err.message, "err");
+  }
+})();
+</script>
+</body>
+</html>

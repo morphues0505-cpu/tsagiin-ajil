@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Цагийн ажил — Админ</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#1D5FAA">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ЦА Админ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Rubik:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section class="panel login" id="loginPanel" hidden>
+  <div class="eyebrow">Цагийн ажил</div>
+  <h1 style="font-size:1.4rem">Админ нэвтрэх</h1>
+  <form id="loginForm" style="display:grid;gap:14px" novalidate>
+    <div class="field"><label for="pw">Нууц үг</label><input id="pw" type="password" autocomplete="current-password" required></div>
+    <div id="loginMsg" hidden></div>
+    <button type="submit" class="primary" id="loginBtn">Нэвтрэх</button>
+  </form>
+</section>
+
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="inner">
+      <h1>Бүртгэл</h1>
+      <button type="button" class="ghost small" id="refreshBtn" aria-label="Шинэчлэх">Шинэчлэх</button>
+      <button type="button" class="ghost small" id="logoutBtn">Гарах</button>
+    </div>
+  </header>
+
+  <main class="wrap wide" style="margin-top:18px">
+    <div class="stats" id="stats" role="group" aria-label="Төлөвөөр шүүх"></div>
+    <div class="filters">
+      <input id="search" type="search" placeholder="Нэр, утас, сургуулиар хайх" aria-label="Хайх">
+      <select id="filterDay" aria-label="Өдрөөр шүүх"><option value="">Бүх өдөр</option></select>
+    </div>
+    <div id="adminMsg" hidden></div>
+    <div class="cards" id="cards"></div>
+    <div class="row" style="justify-content:space-between">
+      <span class="hint" id="updated"></span>
+      <button type="button" class="ghost small" id="csvBtn">CSV татах</button>
+    </div>
+
+    <details class="panel">
+      <summary>Ажлын мэдээллийг засах</summary>
+      <form id="jobForm" novalidate style="display:grid;gap:14px">
+        <div class="field"><label for="j_title">Гарчиг</label><input id="j_title" type="text" maxlength="120" placeholder="Цагийн ажилтан авна"></div>
+        <div class="grid2">
+          <div class="field"><label for="j_org">Байгууллага</label><input id="j_org" type="text" maxlength="100"></div>
+          <div class="field"><label for="j_place">Байршил</label><input id="j_place" type="text" maxlength="100"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label for="j_pay">Цалин</label><input id="j_pay" type="text" placeholder="Цагт 8,000₮" maxlength="60"></div>
+          <div class="field"><label for="j_deadline">Бүртгэл хаагдах</label><input id="j_deadline" type="text" placeholder="11 сарын 20" maxlength="60"></div>
+        </div>
+        <div class="field"><label for="j_desc">Тайлбар</label><textarea id="j_desc" maxlength="2000"></textarea></div>
+        <label class="row" style="gap:8px;font-weight:400"><input type="checkbox" id="j_closed"> Бүртгэлийг хаах (шинэ анкет авахгүй)</label>
+        <div class="row"><button type="submit" class="primary" id="jobSave">Хадгалах</button><span id="jobMsg" class="hint"></span></div>
+      </form>
+    </details>
+    <p class="foot">Бүх өгөгдөл таны Google Sheet-д хадгалагдана. Анкетын линк: <a id="formLink" href="./">нээх</a></p>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+const TOKEN_KEY = "tsa_admin_token";
+let token = null, rows = [], filterStatus = "", loading = false;
+
+const store = {
+  get() { try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; } },
+  set(v) { try { v ? localStorage.setItem(TOKEN_KEY, v) : localStorage.removeItem(TOKEN_KEY); } catch (e) {} }
+};
+
+DAY_FULL.forEach((d, i) => $("filterDay").add(new Option(d, d)));
+$("formLink").href = new URL("./", location.href).href;
+
+function showLogin(text) {
+  token = null;
+  store.set(null);
+  rows = [];
+  $("app").hidden = true;
+  $("loginPanel").hidden = false;
+  msg($("loginMsg"), text || "", text ? "err" : "info");
+  $("pw").value = "";
+  $("pw").focus();
+}
+
+async function call(action, data) {
+  try {
+    return await api(action, { token, ...(data || {}) });
+  } catch (err) {
+    if (err.code === "auth") showLogin("Нэвтрэх хугацаа дууссан. Дахин нэвтэрнэ үү.");
+    throw err;
+  }
+}
+
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const b = $("loginBtn");
+  b.disabled = true;
+  try {
+    token = (await api("login", { password: $("pw").value })).token;
+    store.set(token);
+    startApp();
+  } catch (err) {
+    msg($("loginMsg"), err.message, "err");
+  } finally {
+    b.disabled = false;
+  }
+});
+
+$("logoutBtn").onclick = () => showLogin();
+
+function startApp() {
+  $("loginPanel").hidden = true;
+  $("app").hidden = false;
+  load();
+}
+
+async function load() {
+  if (loading || !token) return;
+  loading = true;
+  $("refreshBtn").disabled = true;
+  $("refreshBtn").textContent = "…";
+  try {
+    const r = await call("list");
+    rows = r.rows || [];
+    fillJob(r.job || {});
+    msg($("adminMsg"), "");
+    $("updated").textContent = "Шинэчилсэн: " + fmtDate(Date.now()).slice(11);
+    render();
+  } catch (err) {
+    if (err.code !== "auth") msg($("adminMsg"), "Ачаалж чадсангүй. " + err.message, "err");
+  } finally {
+    loading = false;
+    $("refreshBtn").disabled = false;
+    $("refreshBtn").textContent = "Шинэчлэх";
+  }
+}
+
+function render() {
+  const st = $("stats");
+  st.textContent = "";
+  [["", "Нийт", rows.length], ...STATUSES.map(s => [s, s, rows.filter(r => (r.status || "Шинэ") === s).length])].forEach(([key, label, n]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "stat";
+    b.setAttribute("aria-pressed", String(filterStatus === key));
+    const num = document.createElement("b");
+    num.textContent = n;
+    b.append(num, label);
+    b.onclick = () => { filterStatus = key; render(); };
+    st.append(b);
+  });
+
+  const q = $("search").value.trim().toLowerCase(), day = $("filterDay").value;
+  const list = rows.filter(r =>
+    (!filterStatus || (r.status || "Шинэ") === filterStatus) &&
+    (!day || (r.days || "").split(", ").includes(day)) &&
+    (!q || [r.lastName, r.firstName, r.phone, r.email, r.school, r.major].join(" ").toLowerCase().includes(q)));
+
+  const box = $("cards");
+  box.textContent = "";
+  if (!list.length) {
+    const d = document.createElement("div");
+    d.className = "empty";
+    d.style.gridColumn = "1/-1";
+    d.textContent = rows.length ? "Шүүлтэд тохирох бүртгэл алга." : "Одоохондоо бүртгэл алга. Анкетын линкээ оюутнуудад илгээгээрэй.";
+    box.append(d);
+    return;
+  }
+  list.forEach(r => box.append(card(r)));
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function card(r) {
+  const c = el("article", "card");
+  const status = r.status || "Шинэ";
+
+  const head = el("div", "card-head");
+  const who = el("div");
+  who.append(el("div", "name", `${r.lastName} ${r.firstName}`), el("div", "sub", (r.age ? r.age + " нас · " : "") + fmtDate(r.createdAt)));
+  head.append(who, el("span", "pill " + (STATUS_CLASS[status] || "s-new"), status));
+  c.append(head);
+
+  const school = [r.type, r.school, r.major].filter(Boolean).join(" · ");
+  if (school) c.append(el("div", "sub", school));
+  const days = (r.days || "").split(", ").filter(Boolean).map(d => DAY_SHORT[DAY_FULL.indexOf(d)] || d).join(" ");
+  const shifts = (r.shifts || "").split(", ").filter(Boolean).map(s => s.split(" ")[0]).join(", ");
+  c.append(el("div", "days", [days, shifts].filter(Boolean).join(" · ")));
+  if (r.email) c.append(el("div", "sub", r.email));
+
+  if (r.experience || r.note) {
+    const det = el("details");
+    det.append(el("summary", null, "Туршлага, тэмдэглэл"));
+    if (r.experience) det.append(el("div", "text", r.experience));
+    if (r.note) { const n = el("div", "text sub", r.note); n.style.marginTop = "6px"; det.append(n); }
+    c.append(det);
+  }
+
+  const act = el("div", "actions");
+  const tel = el("a", "btn primary small", "Залгах");
+  tel.href = "tel:" + (r.phone || "").replace(/[^\d+]/g, "");
+  tel.setAttribute("aria-label", `${r.lastName} ${r.firstName} руу залгах: ${r.phone}`);
+  tel.title = r.phone;
+
+  const sel = el("select");
+  sel.setAttribute("aria-label", "Төлөв");
+  STATUSES.forEach(s => sel.add(new Option(s, s)));
+  sel.value = status;
+  sel.onchange = async () => {
+    const prev = r.status;
+    sel.disabled = true;
+    r.status = sel.value;
+    try {
+      await call("status", { id: r.id, status: sel.value });
+      render();
+    } catch (err) {
+      r.status = prev;
+      sel.value = prev || "Шинэ";
+      if (err.code !== "auth") msg($("adminMsg"), "Төлөв хадгалж чадсангүй. " + err.message, "err");
+    } finally {
+      sel.disabled = false;
+    }
+  };
+
+  const del = el("button", "danger small", "Устгах");
+  del.type = "button";
+  del.onclick = async () => {
+    if (!del.dataset.confirm) {
+      del.dataset.confirm = "1";
+      del.textContent = "Итгэлтэй юу?";
+      setTimeout(() => { if (del.isConnected) { delete del.dataset.confirm; del.textContent = "Устгах"; } }, 4000);
+      return;
+    }
+    del.disabled = true;
+    try {
+      await call("delete", { id: r.id });
+      rows = rows.filter(x => x.id !== r.id);
+      render();
+    } catch (err) {
+      del.disabled = false;
+      if (err.code !== "auth") msg($("adminMsg"), "Устгаж чадсангүй. " + err.message, "err");
+    }
+  };
+
+  const contact = el("div", "actions");
+  contact.append(tel, el("span", "sub", r.phone));
+  act.append(sel, del);
+  c.append(contact, act);
+  return c;
+}
+
+$("search").oninput = render;
+$("filterDay").onchange = render;
+$("refreshBtn").onclick = load;
+
+function csvCell(v) {
+  v = v == null ? "" : String(v);
+  return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+$("csvBtn").onclick = () => {
+  const head = ["Овог", "Нэр", "Утас", "Имэйл", "Нас", "Төрөл", "Сургууль", "Мэргэжил/курс", "Өдрүүд", "Цаг", "Туршлага", "Тэмдэглэл", "Төлөв", "Бүртгүүлсэн"];
+  const lines = [head.join(",")].concat(rows.map(r =>
+    [r.lastName, r.firstName, r.phone, r.email, r.age, r.type, r.school, r.major, r.days, r.shifts, r.experience, r.note, r.status, fmtDate(r.createdAt)].map(csvCell).join(",")));
+  const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "tsagiin-ajil-burtgel.csv";
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+
+function fillJob(j) {
+  if (document.activeElement && $("jobForm").contains(document.activeElement)) return;
+  $("j_title").value = j.title || "";
+  $("j_org").value = j.org || "";
+  $("j_place").value = j.place || "";
+  $("j_pay").value = j.pay || "";
+  $("j_deadline").value = j.deadline || "";
+  $("j_desc").value = j.desc || "";
+  $("j_closed").checked = !!j.closed;
+}
+$("jobForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const b = $("jobSave");
+  b.disabled = true;
+  $("jobMsg").textContent = "";
+  try {
+    await call("saveJob", { job: {
+      title: $("j_title").value.trim(), org: $("j_org").value.trim(), place: $("j_place").value.trim(),
+      pay: $("j_pay").value.trim(), deadline: $("j_deadline").value.trim(), desc: $("j_desc").value.trim(),
+      closed: $("j_closed").checked
+    } });
+    $("jobMsg").textContent = "Хадгалсан";
+  } catch (err) {
+    $("jobMsg").textContent = "Хадгалж чадсангүй: " + err.message;
+  } finally {
+    b.disabled = false;
+  }
+});
+
+// Апп руу буцаж ороход болон 60 секунд тутамд шинэчилнэ.
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") load(); });
+setInterval(() => { if (document.visibilityState === "visible") load(); }, 60000);
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+if (!apiReady()) {
+  $("loginPanel").hidden = false;
+  msg($("loginMsg"), "Тохиргоо дутуу: config.js-д API_URL оруулна уу.", "err");
+} else if ((token = store.get())) {
+  startApp();
+} else {
+  showLogin();
+}
+</script>
+</body>
+</html>
