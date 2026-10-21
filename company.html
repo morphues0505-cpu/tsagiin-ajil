@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Байгууллагын булан</title>
+<meta name="description" content="Оюутнуудад цагийн ажлын зар байршуулах, анкет хүлээн авах">
+<meta name="theme-color" content="#1D5FAA">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Rubik:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css?v=9">
+</head>
+<body>
+
+<!-- ---------- Нэвтрэх / бүртгүүлэх ---------- -->
+<main class="wrap" id="authView" hidden>
+  <header class="hero">
+    <div class="eyebrow">Байгууллагуудад</div>
+    <h1>Оюутнуудаас цагийн ажилтан ав</h1>
+    <p class="desc">Бүртгүүлээд ажлын зараа үнэгүй байршуулаарай. Зар шалгагдсаны дараа самбарт гарна. Оюутнуудын анкет таны хуудсанд болон имэйлд ирнэ.</p>
+    <a class="hint" href="./">← Зарын самбар руу</a>
+  </header>
+
+  <div id="authMsg" hidden></div>
+
+  <section class="panel" id="authTabs">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tabLogin" aria-selected="true">Нэвтрэх</button>
+      <button type="button" role="tab" id="tabRegister" aria-selected="false">Бүртгүүлэх</button>
+    </div>
+
+    <form id="loginForm" novalidate style="display:grid;gap:14px">
+      <div class="field"><label for="l_email">Имэйл</label><input id="l_email" type="email" autocomplete="username" maxlength="100"></div>
+      <div class="field"><label for="l_pw">Нууц үг</label><input id="l_pw" type="password" autocomplete="current-password"></div>
+      <div class="row"><button type="submit" class="primary" id="loginBtn">Нэвтрэх</button><button type="button" class="linkish" id="forgotLink">Нууц үгээ мартсан?</button></div>
+    </form>
+
+    <form id="regForm" novalidate style="display:grid;gap:14px" hidden>
+      <div class="field"><label for="r_org" class="req">Байгууллагын нэр</label><input id="r_org" type="text" autocomplete="organization" maxlength="100"></div>
+      <div class="grid2">
+        <div class="field"><label for="r_name" class="req">Холбогдох хүн</label><input id="r_name" type="text" autocomplete="name" maxlength="60"></div>
+        <div class="field"><label for="r_phone" class="req">Утас</label><input id="r_phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="9911 2233"></div>
+      </div>
+      <div class="field"><label for="r_email" class="req">Имэйл</label><input id="r_email" type="email" autocomplete="email" maxlength="100" placeholder="hr@company.mn"><span class="hint">Нэвтрэх болон анкет хүлээн авах имэйл. Баталгаажуулах код ирнэ.</span></div>
+      <div class="grid2">
+        <div class="field"><label for="r_pw" class="req">Нууц үг</label><input id="r_pw" type="password" autocomplete="new-password" minlength="8"></div>
+        <div class="field"><label for="r_pw2" class="req">Нууц үг дахин</label><input id="r_pw2" type="password" autocomplete="new-password"></div>
+      </div>
+      <div class="trap" aria-hidden="true"><label for="r_web">Website</label><input id="r_web" type="text" tabindex="-1" autocomplete="off"></div>
+      <div class="row"><button type="submit" class="primary" id="regBtn">Бүртгүүлэх</button></div>
+    </form>
+  </section>
+
+  <section class="panel" id="codePanel" hidden>
+    <h2 id="codeTitle">Имэйлээ баталгаажуулах</h2>
+    <p style="margin:0" id="codeText"></p>
+    <form id="codeForm" novalidate style="display:grid;gap:14px">
+      <div class="field"><label for="c_code">6 оронтой код</label><input id="c_code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\d{6}" style="font-size:1.4rem;letter-spacing:.3em;max-width:220px"></div>
+      <div class="grid2" id="resetFields" hidden>
+        <div class="field"><label for="c_pw">Шинэ нууц үг</label><input id="c_pw" type="password" autocomplete="new-password" minlength="8"></div>
+        <div class="field"><label for="c_pw2">Шинэ нууц үг дахин</label><input id="c_pw2" type="password" autocomplete="new-password"></div>
+      </div>
+      <div class="row"><button type="submit" class="primary" id="codeBtn">Баталгаажуулах</button><button type="button" class="ghost small" id="codeBack">Буцах</button></div>
+      <span class="hint">Код ирээгүй бол Spam хавтсаа шалгаарай. Код 15 минут хүчинтэй.</span>
+    </form>
+  </section>
+
+  <section class="panel" id="forgotPanel" hidden>
+    <h2>Нууц үг сэргээх</h2>
+    <form id="forgotForm" novalidate style="display:grid;gap:14px">
+      <div class="field"><label for="f_email">Бүртгэлтэй имэйл</label><input id="f_email" type="email" autocomplete="email" maxlength="100"></div>
+      <div class="row"><button type="submit" class="primary" id="forgotBtn">Код авах</button><button type="button" class="ghost small" id="forgotBack">Буцах</button></div>
+    </form>
+  </section>
+</main>
+
+<!-- ---------- Байгууллагын dashboard ---------- -->
+<div id="appView" hidden>
+  <header class="topbar">
+    <div class="inner">
+      <h1 id="coName">Байгууллага</h1>
+      <button type="button" class="ghost small" id="refreshBtn">Шинэчлэх</button>
+      <button type="button" class="ghost small" id="logoutBtn">Гарах</button>
+    </div>
+  </header>
+
+  <main class="wrap wide" style="margin-top:18px">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tabJobs" aria-selected="true">Миний зарууд</button>
+      <button type="button" role="tab" id="tabApps" aria-selected="false">Анкетууд <span class="badge" id="newBadge" hidden></span></button>
+      <button type="button" role="tab" id="tabProfile" aria-selected="false">Бүртгэл</button>
+    </div>
+    <div id="appMsg" hidden></div>
+
+    <section id="jobsPane" style="display:grid;gap:18px">
+      <div class="row" style="justify-content:space-between">
+        <span class="hint">Шинэ болон засварласан зар админ баталсны дараа самбарт гарна.</span>
+        <button type="button" class="primary" id="newJobBtn">+ Шинэ зар</button>
+      </div>
+      <section class="panel" id="jobFormPanel" hidden>
+        <h2 id="jobFormTitle">Шинэ зар</h2>
+        <form id="jobForm" novalidate style="display:grid;gap:14px">
+          <div class="grid2">
+            <div class="field"><label for="j_title" class="req">Албан тушаал</label><input id="j_title" type="text" maxlength="100" placeholder="Зөөгч, кассчин, бариста…"></div>
+            <div class="field"><label for="j_place" class="req">Байршил</label><input id="j_place" type="text" maxlength="100" placeholder="СБД, 1-р хороо"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label for="j_pay" class="req">Цалин</label><input id="j_pay" type="text" maxlength="60" placeholder="Цагт 9,000₮"></div>
+            <div class="field"><label for="j_schedule">Ажлын цаг</label><input id="j_schedule" type="text" maxlength="120" placeholder="Даваа–Баасан 18–22"></div>
+          </div>
+          <div class="field"><label for="j_deadline">Зар хаагдах</label><input id="j_deadline" type="text" maxlength="60" placeholder="12 сарын 1"></div>
+          <div class="field"><label for="j_desc" class="req">Тайлбар</label><textarea id="j_desc" maxlength="2000" rows="5" placeholder="Гүйцэтгэх ажил, тавигдах шаардлага, давуу тал…"></textarea></div>
+          <div id="jobMsg" hidden></div>
+          <div class="row"><button type="submit" class="primary" id="jobSave">Батлуулахаар илгээх</button><button type="button" class="ghost" id="jobCancel">Болих</button></div>
+        </form>
+      </section>
+      <div class="cards" id="jobCards"></div>
+    </section>
+
+    <section id="appsPane" style="display:grid;gap:18px" hidden>
+      <div class="filters">
+        <input id="search" type="search" placeholder="Нэр, утас, сургуулиар хайх" aria-label="Хайх">
+        <select id="filterJob" aria-label="Зараар шүүх"><option value="">Бүх зар</option></select>
+        <select id="filterStatus" aria-label="Төлөвөөр шүүх"><option value="">Бүх төлөв</option></select>
+      </div>
+      <div class="cards" id="appCards"></div>
+      <div class="row" style="justify-content:flex-end"><button type="button" class="ghost small" id="csvBtn">CSV татах</button></div>
+    </section>
+
+    <section id="profilePane" style="display:grid;gap:18px" hidden>
+      <section class="panel">
+        <h2>Байгууллагын мэдээлэл</h2>
+        <dl class="info" id="profileInfo"></dl>
+        <p class="hint" style="margin:0">Мэдээллээ өөрчлөх бол админтай холбогдоно уу.</p>
+      </section>
+      <section class="panel">
+        <h2>Нууц үг солих</h2>
+        <form id="pwForm" novalidate style="display:grid;gap:14px">
+          <input type="text" id="pw_user" autocomplete="username" hidden>
+          <div class="field"><label for="pw_cur">Одоогийн нууц үг</label><input id="pw_cur" type="password" autocomplete="current-password"></div>
+          <div class="grid2">
+            <div class="field"><label for="pw_new">Шинэ нууц үг</label><input id="pw_new" type="password" autocomplete="new-password" minlength="8"></div>
+            <div class="field"><label for="pw_new2">Шинэ нууц үг дахин</label><input id="pw_new2" type="password" autocomplete="new-password"></div>
+          </div>
+          <div class="row"><button type="submit" class="primary" id="pwSave">Солих</button><span id="pwMsg" class="hint" role="status"></span></div>
+        </form>
+      </section>
+    </section>
+  </main>
+</div>
+
+<script src="config.js?v=9"></script>
+<script src="common.js?v=9"></script>
+<script>
+const TOKEN_KEY = "tsa_company_token";
+const JOB_CLASS = { "Хүлээгдэж буй": "s-contacted", "Нийтлэгдсэн": "s-hired", "Хаагдсан": "s-new", "Татгалзсан": "s-rejected" };
+let token = null, me = null, codeMode = null, pending = null, editingId = null, loading = false, pane = "jobs";
+
+const store = {
+  get() { try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; } },
+  set(v) { try { v ? localStorage.setItem(TOKEN_KEY, v) : localStorage.removeItem(TOKEN_KEY); } catch (e) {} }
+};
+const val = id => $(id).value.trim();
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function busy(btn, on, label) {
+  btn.disabled = on;
+  if (on) { btn.dataset.label = btn.textContent; btn.textContent = label || "…"; }
+  else if (btn.dataset.label) btn.textContent = btn.dataset.label;
+}
+
+/* ---------- Нэвтрэх хэсэг ---------- */
+function showAuth(panel, text, kind) {
+  $("appView").hidden = true;
+  $("authView").hidden = false;
+  $("authTabs").hidden = panel !== "login" && panel !== "register";
+  $("loginForm").hidden = panel !== "login";
+  $("regForm").hidden = panel !== "register";
+  $("tabLogin").setAttribute("aria-selected", String(panel === "login"));
+  $("tabRegister").setAttribute("aria-selected", String(panel === "register"));
+  $("codePanel").hidden = panel !== "code";
+  $("forgotPanel").hidden = panel !== "forgot";
+  msg($("authMsg"), text || "", kind || "info");
+}
+$("tabLogin").onclick = () => showAuth("login");
+$("tabRegister").onclick = () => showAuth("register");
+$("forgotLink").onclick = () => { $("f_email").value = val("l_email"); showAuth("forgot"); };
+$("forgotBack").onclick = $("codeBack").onclick = () => showAuth("login");
+
+function askCode(mode, email) {
+  codeMode = mode;
+  pending = { ...(pending || {}), email };
+  $("codeTitle").textContent = mode === "reset" ? "Нууц үг шинэчлэх" : "Имэйлээ баталгаажуулах";
+  $("codeText").textContent = `${email} хаяг руу 6 оронтой код илгээлээ.`;
+  $("resetFields").hidden = mode !== "reset";
+  $("codeBtn").textContent = mode === "reset" ? "Нууц үг шинэчлэх" : "Баталгаажуулах";
+  $("codeForm").reset();
+  showAuth("code");
+  $("c_code").focus();
+}
+
+function signedIn(r) {
+  token = r.token;
+  store.set(token);
+  pending = null;
+  startApp();
+}
+
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const b = $("loginBtn");
+  busy(b, true);
+  try {
+    signedIn(await api("cLogin", { email: val("l_email"), password: $("l_pw").value }));
+  } catch (err) {
+    if (err.code === "unverified") { askCode("verify", val("l_email").toLowerCase()); msg($("authMsg"), err.message, "info"); }
+    else msg($("authMsg"), err.message, "err");
+  } finally {
+    busy(b, false);
+  }
+});
+
+$("regForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const d = { org: val("r_org"), contactName: val("r_name"), phone: val("r_phone"), email: val("r_email"), password: $("r_pw").value, website: $("r_web").value };
+  const miss = [];
+  if (!d.org) miss.push("байгууллагын нэр");
+  if (!d.contactName) miss.push("холбогдох хүн");
+  if (d.phone.replace(/\D/g, "").length < 8) miss.push("утас (8 оронтой)");
+  if (!/^\S+@\S+\.\S+$/.test(d.email)) miss.push("имэйл");
+  if (miss.length) { msg($("authMsg"), "Дараахыг бөглөнө үү: " + miss.join(", "), "err"); return; }
+  if (d.password.length < 8) { msg($("authMsg"), "Нууц үг 8-аас дээш тэмдэгттэй байна.", "err"); return; }
+  if (d.password !== $("r_pw2").value) { msg($("authMsg"), "Нууц үг таарахгүй байна.", "err"); return; }
+  const b = $("regBtn");
+  busy(b, true, "Бүртгэж байна…");
+  try {
+    const r = await api("cRegister", { data: d });
+    askCode("verify", r.email || d.email.toLowerCase());
+  } catch (err) {
+    msg($("authMsg"), err.message, "err");
+    if (err.code === "exists") { $("l_email").value = d.email; }
+  } finally {
+    busy(b, false);
+  }
+});
+
+$("forgotForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const email = val("f_email").toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(email)) { msg($("authMsg"), "Имэйлээ зөв оруулна уу.", "err"); return; }
+  const b = $("forgotBtn");
+  busy(b, true);
+  try {
+    await api("cForgot", { email });
+    askCode("reset", email);
+    msg($("authMsg"), "Энэ имэйлээр бүртгэл байвал код илгээгдсэн.", "info");
+  } catch (err) {
+    msg($("authMsg"), err.message, "err");
+  } finally {
+    busy(b, false);
+  }
+});
+
+$("codeForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const code = val("c_code");
+  if (!/^\d{6}$/.test(code)) { msg($("authMsg"), "6 оронтой кодоо оруулна уу.", "err"); return; }
+  const b = $("codeBtn");
+  busy(b, true);
+  try {
+    if (codeMode === "reset") {
+      const pw = $("c_pw").value;
+      if (pw.length < 8) throw new Error("Шинэ нууц үг 8-аас дээш тэмдэгттэй байна.");
+      if (pw !== $("c_pw2").value) throw new Error("Шинэ нууц үг таарахгүй байна.");
+      signedIn(await api("cReset", { email: pending.email, code, password: pw }));
+    } else {
+      signedIn(await api("cVerify", { email: pending.email, code }));
+    }
+  } catch (err) {
+    msg($("authMsg"), err.message, "err");
+  } finally {
+    busy(b, false);
+  }
+});
+
+$("logoutBtn").onclick = () => { token = null; me = null; store.set(null); showAuth("login"); };
+
+async function call(action, data) {
+  try {
+    return await api(action, { token, ...(data || {}) });
+  } catch (err) {
+    if (err.code === "auth") { token = null; store.set(null); showAuth("login", err.message, "err"); }
+    throw err;
+  }
+}
+
+/* ---------- Dashboard ---------- */
+function startApp() {
+  $("authView").hidden = true;
+  $("appView").hidden = false;
+  load();
+}
+
+async function load() {
+  if (loading || !token) return;
+  loading = true;
+  $("refreshBtn").disabled = true;
+  try {
+    me = await call("cMe");
+    $("coName").textContent = me.company.org;
+    document.title = me.company.org + " — Байгууллагын булан";
+    msg($("appMsg"), "");
+    render();
+  } catch (err) {
+    if (err.code !== "auth") msg($("appMsg"), "Ачаалж чадсангүй. " + err.message, "err");
+  } finally {
+    loading = false;
+    $("refreshBtn").disabled = false;
+  }
+}
+$("refreshBtn").onclick = load;
+
+function showPane(p) {
+  pane = p;
+  [["jobs", "tabJobs", "jobsPane"], ["apps", "tabApps", "appsPane"], ["profile", "tabProfile", "profilePane"]].forEach(([k, tab, panel]) => {
+    $(tab).setAttribute("aria-selected", String(k === p));
+    $(panel).hidden = k !== p;
+  });
+}
+$("tabJobs").onclick = () => showPane("jobs");
+$("tabApps").onclick = () => showPane("apps");
+$("tabProfile").onclick = () => showPane("profile");
+
+function render() {
+  renderJobs();
+  fillFilters();
+  renderApps();
+  renderProfile();
+  const fresh = me.apps.filter(a => (a.status || "Шинэ") === "Шинэ").length;
+  $("newBadge").hidden = !fresh;
+  $("newBadge").textContent = fresh;
+}
+
+function renderJobs() {
+  const box = $("jobCards");
+  box.textContent = "";
+  if (!me.jobs.length) {
+    const d = el("div", "empty", "Одоохондоо зар алга. «+ Шинэ зар» дарж эхний зараа нэмээрэй.");
+    d.style.gridColumn = "1/-1";
+    box.append(d);
+    return;
+  }
+  me.jobs.forEach(j => {
+    const c = el("article", "card");
+    const head = el("div", "card-head");
+    const t = el("div");
+    t.append(el("div", "name", j.title), el("div", "sub", "Илгээсэн: " + fmtDate(j.createdAt)));
+    head.append(t, el("span", "pill " + (JOB_CLASS[j.status] || "s-new"), j.status));
+    c.append(head, el("div", "days", [j.place, j.pay, j.schedule].filter(Boolean).join(" · ")));
+    if (j.deadline) c.append(el("div", "sub", "Хаагдах: " + j.deadline));
+    if (j.status === "Хүлээгдэж буй") c.append(el("div", "warn-text", "Админ шалгаж байна. Батлагдмагц самбарт гарна."));
+    if (j.status === "Татгалзсан") c.append(el("div", "warn-text", "Зар батлагдаагүй. Засаад дахин илгээж болно."));
+
+    const count = me.apps.filter(a => a.jobId === j.id).length;
+    if (count) {
+      const a = el("button", "linkish", count + " анкет харах");
+      a.type = "button";
+      a.onclick = () => { $("filterJob").value = j.id; renderApps(); showPane("apps"); };
+      c.append(a);
+    }
+
+    const act = el("div", "actions");
+    const edit = el("button", "ghost small", "Засах");
+    edit.type = "button";
+    edit.onclick = () => openJobForm(j);
+    act.append(edit);
+    const state = (label, open) => {
+      const b = el("button", "ghost small", label);
+      b.type = "button";
+      b.onclick = async () => {
+        busy(b, true);
+        try { me = await call("cJobState", { id: j.id, open }); render(); }
+        catch (err) { busy(b, false); if (err.code !== "auth") msg($("appMsg"), err.message, "err"); }
+      };
+      act.append(b);
+    };
+    if (j.status === "Нийтлэгдсэн" || j.status === "Хүлээгдэж буй") state("Хаах", false);
+    if (j.status === "Хаагдсан" && j.approvedAt) state("Дахин нээх", true);
+    if (j.status === "Нийтлэгдсэн") {
+      const share = el("button", "ghost small", "Линк хуулах");
+      share.type = "button";
+      share.onclick = async () => {
+        const url = new URL("./#job=" + j.id, location.href).href;
+        try { await navigator.clipboard.writeText(url); share.textContent = "Хуулсан"; }
+        catch (e) { prompt("Зарын линк:", url); }
+      };
+      act.append(share);
+    }
+    c.append(act);
+    box.append(c);
+  });
+}
+
+function openJobForm(j) {
+  editingId = j ? j.id : null;
+  $("jobFormTitle").textContent = j ? "Зар засах" : "Шинэ зар";
+  ["title", "place", "pay", "schedule", "deadline", "desc"].forEach(k => { $("j_" + k).value = j ? j[k] || "" : ""; });
+  msg($("jobMsg"), j && j.status === "Нийтлэгдсэн" ? "Засварласны дараа зар дахин батлагдах хүртэл самбараас түр алга болно." : "", "info");
+  $("jobFormPanel").hidden = false;
+  $("newJobBtn").hidden = true;
+  $("j_title").focus();
+}
+function closeJobForm() {
+  editingId = null;
+  $("jobFormPanel").hidden = true;
+  $("newJobBtn").hidden = false;
+}
+$("newJobBtn").onclick = () => openJobForm(null);
+$("jobCancel").onclick = closeJobForm;
+
+$("jobForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const job = { title: val("j_title"), place: val("j_place"), pay: val("j_pay"), schedule: val("j_schedule"), deadline: val("j_deadline"), desc: val("j_desc") };
+  const miss = [];
+  if (!job.title) miss.push("албан тушаал");
+  if (!job.place) miss.push("байршил");
+  if (!job.pay) miss.push("цалин");
+  if (!job.desc) miss.push("тайлбар");
+  if (miss.length) { msg($("jobMsg"), "Дараахыг бөглөнө үү: " + miss.join(", "), "err"); return; }
+  const b = $("jobSave");
+  busy(b, true, "Илгээж байна…");
+  try {
+    me = await call("cSaveJob", { id: editingId, job });
+    closeJobForm();
+    render();
+    msg($("appMsg"), "Зар батлуулахаар илгээгдлээ. Админ баталмагц самбарт гарна.", "ok");
+  } catch (err) {
+    if (err.code !== "auth") msg($("jobMsg"), err.message, "err");
+  } finally {
+    busy(b, false);
+  }
+});
+
+function fillFilters() {
+  const sel = $("filterJob"), keep = sel.value;
+  sel.length = 1;
+  me.jobs.forEach(j => sel.add(new Option(j.title, j.id)));
+  sel.value = [...sel.options].some(o => o.value === keep) ? keep : "";
+  const st = $("filterStatus"), skeep = st.value;
+  st.length = 1;
+  me.statuses.forEach(s => st.add(new Option(s, s)));
+  st.value = skeep;
+}
+
+function renderApps() {
+  const q = val("search").toLowerCase(), job = $("filterJob").value, status = $("filterStatus").value;
+  const list = me.apps.filter(a =>
+    (!job || a.jobId === job) && (!status || (a.status || "Шинэ") === status) &&
+    (!q || [a.lastName, a.firstName, a.phone, a.email, a.school, a.major].join(" ").toLowerCase().includes(q)));
+  const box = $("appCards");
+  box.textContent = "";
+  if (!list.length) {
+    const d = el("div", "empty", me.apps.length ? "Шүүлтэд тохирох анкет алга." : "Одоохондоо анкет ирээгүй байна. Зар тань нийтлэгдмэгц оюутнууд анкет илгээнэ.");
+    d.style.gridColumn = "1/-1";
+    box.append(d);
+    return;
+  }
+  list.forEach(a => box.append(appCard(a)));
+}
+$("search").oninput = renderApps;
+$("filterJob").onchange = renderApps;
+$("filterStatus").onchange = renderApps;
+
+function appCard(r) {
+  const c = el("article", "card");
+  const status = r.status || "Шинэ";
+  const head = el("div", "card-head");
+  const who = el("div");
+  who.append(el("div", "name", `${r.lastName} ${r.firstName}`), el("div", "sub", [r.age && r.age + " нас", r.gender, fmtDate(r.createdAt)].filter(Boolean).join(" · ")));
+  head.append(who, el("span", "pill " + (STATUS_CLASS[status] || "s-new"), status));
+  c.append(head, el("div", "job-line", (r.jobTitle || "").split(" — ").slice(1).join(" — ") || r.jobTitle));
+  const school = [r.type, r.school, r.major].filter(Boolean).join(" · ");
+  if (school) c.append(el("div", "sub", school));
+  c.append(el("div", "days", [r.days, r.shifts].filter(Boolean).join(" · ")));
+  if (r.email) c.append(el("div", "sub", r.email));
+  if (r.experience || r.note) {
+    const det = el("details");
+    det.append(el("summary", null, "Туршлага, тэмдэглэл"));
+    if (r.experience) det.append(el("div", "text", r.experience));
+    if (r.note) { const n = el("div", "text sub", r.note); n.style.marginTop = "6px"; det.append(n); }
+    c.append(det);
+  }
+  const contact = el("div", "actions");
+  const tel = el("a", "btn primary small", "Залгах");
+  tel.href = "tel:" + (r.phone || "").replace(/[^\d+]/g, "");
+  contact.append(tel, el("span", "sub", r.phone));
+  if (r.email) { const m = el("a", "btn ghost small", "Имэйл"); m.href = "mailto:" + r.email; contact.append(m); }
+  const sel = el("select");
+  sel.setAttribute("aria-label", "Төлөв");
+  me.statuses.forEach(s => sel.add(new Option(s, s)));
+  sel.value = status;
+  sel.onchange = async () => {
+    const prev = r.status;
+    sel.disabled = true;
+    r.status = sel.value;
+    try { await call("cAppStatus", { id: r.id, status: sel.value }); render(); }
+    catch (err) { r.status = prev; sel.value = prev || "Шинэ"; if (err.code !== "auth") msg($("appMsg"), err.message, "err"); }
+    finally { sel.disabled = false; }
+  };
+  const act = el("div", "actions");
+  act.append(sel);
+  c.append(contact, act);
+  return c;
+}
+
+function csvCell(v) {
+  v = v == null ? "" : String(v);
+  return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+$("csvBtn").onclick = () => {
+  const head = ["Зар", "Овог", "Нэр", "Утас", "Имэйл", "Нас", "Хүйс", "Төрөл", "Сургууль", "Мэргэжил/курс", "Өдрүүд", "Цаг", "Туршлага", "Тэмдэглэл", "Төлөв", "Илгээсэн"];
+  const lines = [head.join(",")].concat(me.apps.map(r =>
+    [r.jobTitle, r.lastName, r.firstName, r.phone, r.email, r.age, r.gender, r.type, r.school, r.major, r.days, r.shifts, r.experience, r.note, r.status, fmtDate(r.createdAt)].map(csvCell).join(",")));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" }));
+  a.download = "anketuud.csv";
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+
+function renderProfile() {
+  const dl = $("profileInfo");
+  dl.textContent = "";
+  [["Байгууллага", me.company.org], ["Холбогдох хүн", me.company.contactName], ["Утас", me.company.phone], ["Имэйл", me.company.email], ["Бүртгүүлсэн", fmtDate(me.company.createdAt)]]
+    .forEach(([k, v]) => dl.append(el("dt", null, k), el("dd", null, v || "—")));
+  $("pw_user").value = me.company.email;
+}
+
+$("pwForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const out = $("pwMsg"), b = $("pwSave"), nw = $("pw_new").value;
+  if (nw.length < 8) { out.textContent = "Шинэ нууц үг 8-аас дээш тэмдэгттэй байна."; return; }
+  if (nw !== $("pw_new2").value) { out.textContent = "Шинэ нууц үг таарахгүй байна."; return; }
+  busy(b, true);
+  out.textContent = "";
+  try {
+    const r = await call("cPassword", { current: $("pw_cur").value, next: nw });
+    token = r.token;
+    store.set(token);
+    $("pwForm").reset();
+    out.textContent = "Нууц үг солигдлоо";
+  } catch (err) {
+    out.textContent = err.message;
+  } finally {
+    busy(b, false);
+  }
+});
+
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && token) load(); });
+
+if (!apiReady()) showAuth("login", "Тохиргоо дутуу: config.js-д API_URL оруулна уу.", "err");
+else if ((token = store.get())) startApp();
+else showAuth(location.hash === "#register" ? "register" : "login");
+</script>
+</body>
+</html>

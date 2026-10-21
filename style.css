@@ -111,6 +111,9 @@ details[open] summary{margin-bottom:14px}
 .chosen{background:var(--info-soft);border-radius:8px;padding:12px 14px;display:grid;gap:2px}
 .consent{display:flex;gap:10px;align-items:flex-start;font-weight:400;font-size:.9rem}
 .consent input{margin-top:3px;width:18px;height:18px;flex:none}
+.info{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}
+.info dt{color:var(--muted);font-size:.88rem}
+.info dd{margin:0;font-weight:500;overflow-wrap:anywhere}
 .admins{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .admin-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-weight:500}
 @media (prefers-reduced-motion:no-preference){button,.btn{transition:filter .15s}button:hover:not(:disabled),.btn:hover{filter:brightness(1.08)}}

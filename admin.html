@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Rubik:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 
@@ -45,6 +45,7 @@
     <div class="tabs" role="tablist">
       <button type="button" role="tab" id="tabApps" aria-selected="true">Анкетууд</button>
       <button type="button" role="tab" id="tabJobs" aria-selected="false">Зарууд <span class="badge" id="pendingBadge" hidden></span></button>
+      <button type="button" role="tab" id="tabCos" aria-selected="false">Байгууллагууд</button>
     </div>
     <div id="adminMsg" hidden></div>
 
@@ -66,7 +67,11 @@
     <div id="jobsPane" style="display:grid;gap:18px" hidden>
       <div class="stats" id="jobStats" role="group" aria-label="Зарын төлөвөөр шүүх"></div>
       <div class="cards" id="jobCards"></div>
-      <p class="hint" style="margin:0">Байгууллагууд зараа энэ линкээр илгээнэ: <a id="postLink" href="post.html">post.html</a></p>
+      <p class="hint" style="margin:0">Байгууллагууд энэ линкээр бүртгүүлж зараа нэмнэ: <a id="postLink" href="company.html">company.html</a></p>
+    </div>
+
+    <div id="cosPane" style="display:grid;gap:18px" hidden>
+      <div class="cards" id="coCards"></div>
     </div>
     <p class="foot">Бүх өгөгдөл таны Google Sheet-д хадгалагдана. Зарын самбар: <a id="formLink" href="./">нээх</a></p>
   </main>
@@ -159,10 +164,11 @@
   </main>
 </div>
 
-<script src="config.js?v=8"></script>
-<script src="common.js?v=8"></script>
+<script src="config.js?v=9"></script>
+<script src="common.js?v=9"></script>
 <script>
 const TOKEN_KEY = "tsa_admin_token";
+let companies = [];
 let token = null, rows = [], jobs = [], filterStatus = "", loading = false, options = {}, settings = null, view = "list";
 let pane = "apps", jobFilter = "Хүлээгдэж буй";
 const JOB_STATUS = { pending: "Хүлээгдэж буй", approved: "Нийтлэгдсэн", closed: "Хаагдсан", rejected: "Татгалзсан" };
@@ -200,7 +206,7 @@ function setOptions(o) {
 setOptions();
 const shortDay = d => DAY_SHORT[DAY_FULL.indexOf(d)] || d.slice(0, 2);
 $("formLink").href = new URL("./", location.href).href;
-$("postLink").href = $("postLink").textContent = new URL("post.html", location.href).href;
+$("postLink").href = $("postLink").textContent = new URL("company.html", location.href).href;
 
 function showLogin(text) {
   token = null;
@@ -254,6 +260,7 @@ async function load() {
     const r = await call("list");
     rows = r.rows || [];
     jobs = r.jobs || [];
+    companies = r.companies || [];
     setOptions(r.options);
     fillJob(r.job || {});
     fillJobFilter();
@@ -261,6 +268,7 @@ async function load() {
     $("updated").textContent = "Шинэчилсэн: " + fmtDate(Date.now()).slice(11);
     render();
     renderJobs();
+    renderCompanies();
   } catch (err) {
     if (err.code !== "auth") msg($("adminMsg"), "Ачаалж чадсангүй. " + err.message, "err");
   } finally {
@@ -420,13 +428,82 @@ function sentLine(r) {
 /* ---------- Зарууд ---------- */
 function showPane(p) {
   pane = p;
-  $("appsPane").hidden = p !== "apps";
-  $("jobsPane").hidden = p !== "jobs";
-  $("tabApps").setAttribute("aria-selected", String(p === "apps"));
-  $("tabJobs").setAttribute("aria-selected", String(p === "jobs"));
+  [["apps", "tabApps", "appsPane"], ["jobs", "tabJobs", "jobsPane"], ["cos", "tabCos", "cosPane"]].forEach(([k, tab, panel]) => {
+    $(tab).setAttribute("aria-selected", String(k === p));
+    $(panel).hidden = k !== p;
+  });
 }
 $("tabApps").onclick = () => showPane("apps");
 $("tabJobs").onclick = () => showPane("jobs");
+$("tabCos").onclick = () => showPane("cos");
+
+/* ---------- Байгууллагууд ---------- */
+const CO_CLASS = { "Идэвхтэй": "s-hired", "Баталгаажаагүй": "s-contacted", "Хаагдсан": "s-rejected" };
+function renderCompanies() {
+  const box = $("coCards");
+  box.textContent = "";
+  if (!companies.length) {
+    const d = el("div", "empty", "Одоохондоо бүртгүүлсэн байгууллага алга.");
+    d.style.gridColumn = "1/-1";
+    box.append(d);
+    return;
+  }
+  companies.forEach(co => {
+    const c = el("article", "card");
+    const head = el("div", "card-head");
+    const t = el("div");
+    t.append(el("div", "name", co.org), el("div", "sub", "Бүртгүүлсэн: " + fmtDate(co.createdAt) + (co.lastLogin ? " · Сүүлд: " + fmtDate(co.lastLogin) : "")));
+    head.append(t, el("span", "pill " + (CO_CLASS[co.status] || "s-new"), co.status));
+    c.append(head, el("div", "sub", co.contactName + " · " + co.phone + " · " + co.email));
+    const own = jobs.filter(j => j.companyId === co.id);
+    const ids = own.map(j => j.id);
+    c.append(el("div", "days", own.length + " зар · " + rows.filter(r => ids.indexOf(r.jobId) >= 0).length + " анкет"));
+    const act = el("div", "actions");
+    const tel = el("a", "btn ghost small", "Залгах");
+    tel.href = "tel:" + (co.phone || "").replace(/[^\d+]/g, "");
+    act.append(tel);
+    if (co.status !== "Баталгаажаагүй") {
+      const blocked = co.status === "Хаагдсан";
+      const b = el("button", (blocked ? "primary" : "ghost") + " small", blocked ? "Нээх" : "Хаах");
+      b.type = "button";
+      b.onclick = async () => {
+        b.disabled = true;
+        try {
+          await call("companyStatus", { id: co.id, status: blocked ? "active" : "blocked" });
+          co.status = blocked ? "Идэвхтэй" : "Хаагдсан";
+          renderCompanies();
+        } catch (err) {
+          b.disabled = false;
+          if (err.code !== "auth") msg($("adminMsg"), err.message, "err");
+        }
+      };
+      act.append(b);
+    }
+    const del = el("button", "danger small", "Устгах");
+    del.type = "button";
+    del.onclick = async () => {
+      if (!del.dataset.confirm) {
+        del.dataset.confirm = "1";
+        del.textContent = "Итгэлтэй юу?";
+        setTimeout(() => { if (del.isConnected) { delete del.dataset.confirm; del.textContent = "Устгах"; } }, 4000);
+        return;
+      }
+      del.disabled = true;
+      try {
+        await call("deleteCompany", { id: co.id });
+        companies = companies.filter(x => x.id !== co.id);
+        renderCompanies();
+      } catch (err) {
+        del.disabled = false;
+        if (err.code !== "auth") msg($("adminMsg"), err.message, "err");
+      }
+    };
+    act.append(del);
+    c.append(act);
+    if (co.status === "Хаагдсан") c.append(el("div", "warn-text", "Нэвтэрч чадахгүй. Зарыг нь «Зарууд» хэсгээс тусад нь хаана."));
+    box.append(c);
+  });
+}
 
 function fillJobFilter() {
   const sel = $("filterJob"), keep = sel.value;

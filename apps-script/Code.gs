@@ -1,7 +1,8 @@
 /**
  * Цагийн ажлын зарын самбар — Google Apps Script backend.
  *
- * Байгууллага зар илгээнэ → админ батална → оюутан зар сонгож анкет илгээнэ → анкет байгууллагын имэйл рүү очно.
+ * Байгууллага бүртгүүлж нэвтэрнэ → зар нэмнэ → админ зар бүрийг батална → оюутан зар сонгож анкет илгээнэ
+ * → анкет байгууллагын dashboard-д харагдаж, имэйлээр мэдэгдэнэ.
  *
  * Script properties (Project Settings → Script properties):
  *   <нэвтрэх нэр>   заавал. Property-ийн нэр = админы нэвтрэх нэр, утга = нууц үг. Хамгийн ихдээ 4 админ.
@@ -30,10 +31,19 @@ const JOBS = {
     ['id', 'id'], ['createdAt', 'Илгээсэн'], ['status', 'Төлөв'],
     ['org', 'Байгууллага'], ['contactName', 'Холбогдох хүн'], ['contactPhone', 'Утас'], ['contactEmail', 'Имэйл'],
     ['title', 'Албан тушаал'], ['place', 'Байршил'], ['pay', 'Цалин'], ['schedule', 'Ажлын цаг'],
-    ['deadline', 'Хаагдах'], ['desc', 'Тайлбар'], ['approvedAt', 'Баталсан'], ['approvedBy', 'Баталсан админ']
+    ['deadline', 'Хаагдах'], ['desc', 'Тайлбар'], ['approvedAt', 'Баталсан'], ['approvedBy', 'Баталсан админ'],
+    ['companyId', 'Байгууллагын id']
   ]
 };
-[APPS, JOBS].forEach(t => { t.keys = t.cols.map(c => c[0]); });
+const COMPANIES = {
+  name: 'Байгууллагууд',
+  cols: [
+    ['id', 'id'], ['createdAt', 'Бүртгүүлсэн'], ['status', 'Төлөв'], ['org', 'Байгууллага'],
+    ['contactName', 'Холбогдох хүн'], ['phone', 'Утас'], ['email', 'Имэйл'],
+    ['salt', 'salt'], ['hash', 'hash'], ['lastLogin', 'Сүүлд нэвтэрсэн']
+  ]
+};
+[APPS, JOBS, COMPANIES].forEach(t => { t.keys = t.cols.map(c => c[0]); });
 
 const DAYS = ['Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба', 'Ням'];
 const SHIFTS = ['Өглөө (08–12)', 'Өдөр (12–17)', 'Орой (17–22)'];
@@ -46,12 +56,16 @@ const TOKEN_DAYS = 30;
 const MAX_ADMINS = 4;
 const MAX_PENDING_JOBS = 50;
 const MAX_POSTS_PER_HOUR = 20;
+const COMPANY_STATUSES = { unverified: 'Баталгаажаагүй', active: 'Идэвхтэй', blocked: 'Хаагдсан' };
+const HASH_ROUNDS = 300;
+const CODE_MINUTES = 15;
 const RESERVED = ['NOTIFY_EMAIL', 'ADMIN_URL', 'TOKEN_SECRET', 'JOB', 'CONFIG'];
 
 /** Нэг удаа ажиллуулна: хүснэгтүүд үүсгээд эрх зөвшөөрүүлнэ. */
 function setup() {
   table_(APPS);
   table_(JOBS);
+  table_(COMPANIES).hideColumns(8, 2);
   if (!admins_().length) {
     throw new Error('Project Settings → Script properties хэсэгт админ нэмнэ үү: Property = нэвтрэх нэр, Value = нууц үг.');
   }
@@ -70,12 +84,30 @@ function doPost(e) {
       case 'job':
       case 'board': return out_(board_());
       case 'apply': return out_(apply_(p.data || {}));
-      case 'postJob': return out_(postJob_(p.data || {}));
+      case 'postJob': throw fail_('closed', 'Зар байршуулахын тулд байгууллагаар бүртгүүлж нэвтэрнэ үү.');
       case 'login': return out_(login_(p.user, p.password));
+      case 'cRegister': return out_(cRegister_(p.data || {}));
+      case 'cVerify': return out_(cVerify_(p.email, p.code));
+      case 'cLogin': return out_(cLogin_(p.email, p.password));
+      case 'cForgot': return out_(cForgot_(p.email));
+      case 'cReset': return out_(cReset_(p.email, p.code, p.password));
+    }
+    if (String(p.token || '').indexOf('c.') === 0) {
+      const co = companyAuth_(p.token);
+      switch (p.action) {
+        case 'cMe': return out_(cMe_(co));
+        case 'cSaveJob': return out_(cSaveJob_(co, p.id, p.job || {}));
+        case 'cJobState': return out_(cJobState_(co, p.id, p.open === true));
+        case 'cAppStatus': return out_(cAppStatus_(co, p.id, p.status));
+        case 'cPassword': return out_(cPassword_(co, p.current, p.next));
+      }
+      throw fail_('bad_action', 'Үл мэдэгдэх үйлдэл.');
     }
     const user = auth_(p.token);
     switch (p.action) {
-      case 'list': return out_({ ok: true, rows: list_(APPS), jobs: list_(JOBS), job: site_(), options: options_() });
+      case 'list': return out_({ ok: true, rows: list_(APPS), jobs: list_(JOBS), companies: list_(COMPANIES).map(publicCompany_), job: site_(), options: options_() });
+      case 'companyStatus': return out_(setCompanyStatus_(p.id, p.status));
+      case 'deleteCompany': return out_(withRow_(COMPANIES, p.id, (sh, row) => sh.deleteRow(row)));
       case 'status': return out_(setStatus_(p.id, p.status));
       case 'delete': return out_(withRow_(APPS, p.id, (sh, row) => sh.deleteRow(row)));
       case 'resend': return out_(resend_(p.id));
@@ -110,48 +142,273 @@ function options_() {
   return { days: c.days, shifts: c.shifts, types: c.types, genderMode: c.genderMode, genders: c.genders };
 }
 
-function postJob_(d) {
-  if (d.website) return { ok: true }; // spam bot-ын хавх
-  if (site_().postsOpen === false) throw fail_('closed', 'Одоогоор шинэ зар хүлээж авахгүй байна.');
-  const j = {
-    org: clean_(d.org, 100), contactName: clean_(d.contactName, 60), contactPhone: clean_(d.contactPhone, 20),
-    contactEmail: clean_(d.contactEmail, 100), title: clean_(d.title, 100), place: clean_(d.place, 100),
-    pay: clean_(d.pay, 60), schedule: clean_(d.schedule, 120), deadline: clean_(d.deadline, 60), desc: clean_(d.desc, 2000)
+/* ---------- Байгууллагын бүртгэл ---------- */
+
+function normEmail_(e) {
+  return clean_(e, 100).toLowerCase();
+}
+
+// Нууц үгийг шууд хадгалахгүй: salt + SHA-256-г олон давтана.
+function hash_(pw, salt) {
+  let h = salt + '|' + pw;
+  for (let i = 0; i < HASH_ROUNDS; i++) {
+    h = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, h, Utilities.Charset.UTF_8));
+  }
+  return h;
+}
+
+function findCompany_(by, value) {
+  const sh = table_(COMPANIES), K = COMPANIES.keys, data = rows_(sh, COMPANIES);
+  const i = data.findIndex(r => String(r[K.indexOf(by)]).toLowerCase() === String(value).toLowerCase());
+  return i < 0 ? null : { row: i + 2, co: objOf_(data[i], COMPANIES) };
+}
+
+function setCompanyFields_(row, fields) {
+  const sh = table_(COMPANIES);
+  Object.keys(fields).forEach(k => sh.getRange(row, COMPANIES.keys.indexOf(k) + 1).setValue(text_(fields[k])));
+}
+
+function publicCompany_(c) {
+  return { id: c.id, createdAt: c.createdAt, status: c.status, org: c.org, contactName: c.contactName, phone: c.phone, email: c.email, lastLogin: c.lastLogin };
+}
+
+function checkPassword_(pw, email) {
+  pw = String(pw || '');
+  if (pw.length < 8) throw fail_('invalid', 'Нууц үг 8-аас дээш тэмдэгттэй байна.');
+  if (pw.toLowerCase() === String(email).toLowerCase()) throw fail_('invalid', 'Нууц үг имэйлтэйгээ ижил байж болохгүй.');
+  return pw;
+}
+
+// 6 оронтой кодыг имэйлээр илгээнэ. Код 15 минут хүчинтэй, 5 удаа буруу оруулбал хүчингүй.
+function sendCode_(email, purpose) {
+  const cache = CacheService.getScriptCache();
+  const sent = Number(cache.get('codesent_' + email) || 0);
+  if (sent >= 5) throw fail_('busy', 'Хэт олон код хүссэн байна. 15 минутын дараа дахин оролдоно уу.');
+  if (MailApp.getRemainingDailyQuota() < 1) throw fail_('mail', 'Өнөөдөр имэйл илгээх хязгаар дууссан. Маргааш дахин оролдоно уу.');
+  const code = String(parseInt(Utilities.getUuid().replace(/-/g, '').slice(0, 8), 16) % 1000000).padStart(6, '0');
+  cache.put('code_' + email, JSON.stringify({ code: code, purpose: purpose, tries: 0 }), CODE_MINUTES * 60);
+  cache.put('codesent_' + email, String(sent + 1), CODE_MINUTES * 60);
+  const site = site_().title || 'Цагийн ажлын самбар';
+  MailApp.sendEmail(email, site + ': баталгаажуулах код ' + code, [
+    'Таны код: ' + code, '',
+    purpose === 'reset' ? 'Энэ кодоор нууц үгээ шинэчилнэ.' : 'Энэ кодоор байгууллагын бүртгэлээ баталгаажуулна.',
+    'Код ' + CODE_MINUTES + ' минут хүчинтэй. Та хүсээгүй бол энэ имэйлийг үл тоомсорлоно уу.'
+  ].join('\n'));
+}
+
+function takeCode_(email, code, purpose) {
+  const cache = CacheService.getScriptCache();
+  let c = null;
+  try { c = JSON.parse(cache.get('code_' + email) || 'null'); } catch (e) {}
+  if (!c || c.purpose !== purpose) throw fail_('invalid', 'Код хүчингүй болсон байна. Шинэ код авна уу.');
+  if (String(code || '').trim() !== c.code) {
+    c.tries++;
+    if (c.tries >= 5) cache.remove('code_' + email);
+    else cache.put('code_' + email, JSON.stringify(c), CODE_MINUTES * 60);
+    throw fail_('invalid', 'Код буруу байна.');
+  }
+  cache.remove('code_' + email);
+}
+
+function cRegister_(d) {
+  if (d.website) return { ok: true };
+  if (site_().postsOpen === false) throw fail_('closed', 'Одоогоор шинэ байгууллага бүртгэхгүй байна.');
+  const c = {
+    org: clean_(d.org, 100), contactName: clean_(d.contactName, 60),
+    phone: clean_(d.phone, 20), email: normEmail_(d.email)
   };
   const miss = [];
-  if (!j.org) miss.push('байгууллагын нэр');
-  if (!j.contactName) miss.push('холбогдох хүн');
-  if (j.contactPhone.replace(/\D/g, '').length < 8) miss.push('утас (8 оронтой)');
-  if (!/^\S+@\S+\.\S+$/.test(j.contactEmail)) miss.push('имэйл');
+  if (!c.org) miss.push('байгууллагын нэр');
+  if (!c.contactName) miss.push('холбогдох хүн');
+  if (c.phone.replace(/\D/g, '').length < 8) miss.push('утас (8 оронтой)');
+  if (!/^\S+@\S+\.\S+$/.test(c.email)) miss.push('имэйл');
+  if (miss.length) throw fail_('invalid', 'Дараахыг бөглөнө үү: ' + miss.join(', '));
+  const pw = checkPassword_(d.password, c.email);
+
+  const cache = CacheService.getScriptCache();
+  const regs = Number(cache.get('regs') || 0);
+  if (regs >= MAX_POSTS_PER_HOUR) throw fail_('busy', 'Хэт олон бүртгэл ирж байна. Түр хүлээгээд дахин оролдоно уу.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const found = findCompany_('email', c.email);
+    if (found && found.co.status !== COMPANY_STATUSES.unverified) throw fail_('exists', 'Энэ имэйлээр бүртгэл байна. Нэвтэрнэ үү.');
+    const salt = Utilities.getUuid();
+    if (found) {
+      // Баталгаажуулаагүй хуучин бүртгэлийг шинэ мэдээллээр дарна.
+      setCompanyFields_(found.row, { org: c.org, contactName: c.contactName, phone: c.phone, salt: salt, hash: hash_(pw, salt) });
+    } else {
+      const meta = { id: Utilities.getUuid(), createdAt: new Date(), status: COMPANY_STATUSES.unverified, salt: salt, hash: hash_(pw, salt), lastLogin: '' };
+      table_(COMPANIES).appendRow(COMPANIES.keys.map(k => (k in meta ? meta[k] : c[k])).map(text_));
+    }
+    cache.put('regs', String(regs + 1), 3600);
+  } finally {
+    lock.releaseLock();
+  }
+  sendCode_(c.email, 'verify');
+  return { ok: true, email: c.email };
+}
+
+function cVerify_(email, code) {
+  email = normEmail_(email);
+  const found = findCompany_('email', email);
+  if (!found) throw fail_('invalid', 'Бүртгэл олдсонгүй.');
+  takeCode_(email, code, 'verify');
+  if (found.co.status === COMPANY_STATUSES.unverified) setCompanyFields_(found.row, { status: COMPANY_STATUSES.active });
+  notifyAdmin_('Шинэ байгууллага бүртгүүллээ: ' + found.co.org, [
+    found.co.org, 'Холбогдох: ' + found.co.contactName + ', ' + found.co.phone + ', ' + email
+  ]);
+  return cSession_(found.row, findCompany_('email', email).co);
+}
+
+function cLogin_(email, pw) {
+  email = normEmail_(email);
+  const cache = CacheService.getScriptCache();
+  const key = 'cfail_' + email, fails = Number(cache.get(key) || 0);
+  if (fails >= 5) throw fail_('locked', 'Олон удаа буруу оруулсан тул 10 минут түгжигдлээ.');
+  const found = findCompany_('email', email);
+  if (!found || hash_(String(pw || ''), found.co.salt) !== found.co.hash) {
+    cache.put(key, String(fails + 1), 600);
+    throw fail_('auth', 'Имэйл эсвэл нууц үг буруу байна.');
+  }
+  cache.remove(key);
+  if (found.co.status === COMPANY_STATUSES.blocked) throw fail_('blocked', 'Энэ бүртгэлийг хаасан байна. Админтай холбогдоно уу.');
+  if (found.co.status === COMPANY_STATUSES.unverified) {
+    sendCode_(email, 'verify');
+    throw fail_('unverified', 'Имэйлээ баталгаажуулна уу. Таны имэйл рүү шинэ код илгээлээ.');
+  }
+  return cSession_(found.row, found.co);
+}
+
+// Бүртгэл байгаа эсэхийг задруулахгүйн тулд үргэлж ok буцаана.
+function cForgot_(email) {
+  email = normEmail_(email);
+  const found = findCompany_('email', email);
+  if (found && found.co.status !== COMPANY_STATUSES.blocked) sendCode_(email, 'reset');
+  return { ok: true };
+}
+
+function cReset_(email, code, pw) {
+  email = normEmail_(email);
+  const found = findCompany_('email', email);
+  if (!found || found.co.status === COMPANY_STATUSES.blocked) throw fail_('invalid', 'Код хүчингүй болсон байна. Шинэ код авна уу.');
+  pw = checkPassword_(pw, email);
+  takeCode_(email, code, 'reset');
+  const salt = Utilities.getUuid();
+  // Код имэйлд очсон тул баталгаажаагүй бүртгэлийг ч идэвхжүүлнэ.
+  setCompanyFields_(found.row, { salt: salt, hash: hash_(pw, salt), status: found.co.status === COMPANY_STATUSES.unverified ? COMPANY_STATUSES.active : found.co.status });
+  return cSession_(found.row, findCompany_('email', email).co);
+}
+
+function cSession_(row, co) {
+  setCompanyFields_(row, { lastLogin: new Date() });
+  const exp = Date.now() + TOKEN_DAYS * 864e5;
+  return { ok: true, token: 'c.' + exp + '.' + co.id + '.' + cSign_(exp, co), company: publicCompany_(co) };
+}
+
+// Нууц үг солигдох эсвэл бүртгэл хаагдахад token хүчингүй болно.
+function cSign_(exp, co) {
+  sign_(0, ''); // TOKEN_SECRET байгаа эсэхийг баталгаажуулна
+  const key = props_().getProperty('TOKEN_SECRET') + '|c|' + co.hash;
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(exp + '|' + co.id, key));
+}
+
+function companyAuth_(token) {
+  const parts = String(token || '').split('.');
+  const found = parts.length === 4 ? findCompany_('id', parts[2]) : null;
+  if (!found || Number(parts[1]) < Date.now() || parts[3] !== cSign_(parts[1], found.co)) throw fail_('auth', 'Дахин нэвтэрнэ үү.');
+  if (found.co.status !== COMPANY_STATUSES.active) throw fail_('auth', 'Бүртгэл идэвхгүй байна. Админтай холбогдоно уу.');
+  return found.co;
+}
+
+function cMe_(co) {
+  const jobs = list_(JOBS).filter(j => j.companyId === co.id);
+  const ids = jobs.map(j => j.id);
+  const apps = list_(APPS).filter(a => ids.indexOf(a.jobId) >= 0);
+  return { ok: true, company: publicCompany_(co), jobs: jobs, apps: apps, statuses: STATUSES, site: site_() };
+}
+
+function jobFields_(d) {
+  const j = {
+    title: clean_(d.title, 100), place: clean_(d.place, 100), pay: clean_(d.pay, 60),
+    schedule: clean_(d.schedule, 120), deadline: clean_(d.deadline, 60), desc: clean_(d.desc, 2000)
+  };
+  const miss = [];
   if (!j.title) miss.push('албан тушаал');
   if (!j.place) miss.push('байршил');
   if (!j.pay) miss.push('цалин');
   if (!j.desc) miss.push('тайлбар');
   if (miss.length) throw fail_('invalid', 'Дараахыг бөглөнө үү: ' + miss.join(', '));
+  return j;
+}
 
-  const cache = CacheService.getScriptCache();
-  const posts = Number(cache.get('posts') || 0);
-  if (posts >= MAX_POSTS_PER_HOUR) throw fail_('busy', 'Хэт олон зар ирж байна. Түр хүлээгээд дахин оролдоно уу.');
+// Шинэ эсвэл засварласан зар бүр админы баталгааг дахин хүлээнэ.
+function cSaveJob_(co, id, d) {
+  if (site_().postsOpen === false) throw fail_('closed', 'Одоогоор шинэ зар хүлээж авахгүй байна.');
+  const j = jobFields_(d);
+  Object.assign(j, { org: co.org, contactName: co.contactName, contactPhone: co.phone, contactEmail: co.email, status: JOB_STATUSES.pending });
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
-    const sh = table_(JOBS);
-    const pending = rows_(sh, JOBS).filter(r => r[JOBS.keys.indexOf('status')] === JOB_STATUSES.pending).length;
-    if (pending >= MAX_PENDING_JOBS) throw fail_('busy', 'Батлагдахыг хүлээж буй зар олон байна. Дараа дахин оролдоно уу.');
-    const meta = { id: Utilities.getUuid(), createdAt: new Date(), status: JOB_STATUSES.pending, approvedAt: '', approvedBy: '' };
-    sh.appendRow(JOBS.keys.map(k => (k in meta ? meta[k] : j[k])).map(text_));
-    cache.put('posts', String(posts + 1), 3600);
+    const sh = table_(JOBS), K = JOBS.keys, data = rows_(sh, JOBS);
+    if (id) {
+      const i = data.findIndex(r => String(r[0]) === String(id) && String(r[K.indexOf('companyId')]) === co.id);
+      if (i < 0) throw fail_('not_found', 'Зар олдсонгүй.');
+      const row = data[i].slice();
+      Object.keys(j).forEach(k => { row[K.indexOf(k)] = j[k]; });
+      sh.getRange(i + 2, 1, 1, K.length).setValues([row.map(text_)]);
+    } else {
+      const pending = data.filter(r => r[K.indexOf('status')] === JOB_STATUSES.pending).length;
+      if (pending >= MAX_PENDING_JOBS) throw fail_('busy', 'Батлагдахыг хүлээж буй зар олон байна. Дараа дахин оролдоно уу.');
+      const meta = { id: Utilities.getUuid(), createdAt: new Date(), approvedAt: '', approvedBy: '', companyId: co.id };
+      sh.appendRow(K.map(k => (k in meta ? meta[k] : j[k])).map(text_));
+    }
   } finally {
     lock.releaseLock();
   }
-  notifyAdmin_('Шинэ зар батлах хүлээгдэж байна: ' + j.org + ' — ' + j.title, [
-    j.org + ' — ' + j.title,
-    'Байршил: ' + j.place, 'Цалин: ' + j.pay, j.schedule && 'Цаг: ' + j.schedule,
-    'Холбогдох: ' + j.contactName + ', ' + j.contactPhone + ', ' + j.contactEmail,
-    '\n' + j.desc,
-    '\nАдмин апп-ын «Зарууд» хэсгээс батална уу.'
+  notifyAdmin_((id ? 'Зар засварлагдлаа, батлах хүлээгдэж байна: ' : 'Шинэ зар батлах хүлээгдэж байна: ') + co.org + ' — ' + j.title, [
+    co.org + ' — ' + j.title, 'Байршил: ' + j.place, 'Цалин: ' + j.pay, j.schedule && 'Цаг: ' + j.schedule,
+    '\n' + j.desc, '\nАдмин апп-ын «Зарууд» хэсгээс батална уу.'
   ]);
-  return { ok: true };
+  return cMe_(co);
+}
+
+// Байгууллага өөрийн нийтлэгдсэн зарыг хааж, урьд нь батлагдсан зараа дахин нээж болно.
+function cJobState_(co, id, open) {
+  const job = findJob_(id);
+  if (!job || job.companyId !== co.id) throw fail_('not_found', 'Зар олдсонгүй.');
+  let next;
+  if (open) {
+    if (job.status !== JOB_STATUSES.closed || !job.approvedAt) throw fail_('invalid', 'Энэ зарыг дахин нээх боломжгүй.');
+    next = JOB_STATUSES.approved;
+  } else {
+    if (job.status === JOB_STATUSES.rejected) throw fail_('invalid', 'Татгалзсан зарыг хаах шаардлагагүй.');
+    next = JOB_STATUSES.closed;
+  }
+  withRow_(JOBS, id, (sh, row) => sh.getRange(row, JOBS.keys.indexOf('status') + 1).setValue(next));
+  return cMe_(co);
+}
+
+function cAppStatus_(co, id, status) {
+  if (STATUSES.indexOf(status) < 0) throw fail_('invalid', 'Буруу төлөв.');
+  const app = list_(APPS).filter(a => a.id === String(id))[0];
+  const job = app && findJob_(app.jobId);
+  if (!job || job.companyId !== co.id) throw fail_('not_found', 'Анкет олдсонгүй.');
+  return setStatus_(id, status);
+}
+
+function cPassword_(co, current, next) {
+  if (hash_(String(current || ''), co.salt) !== co.hash) throw fail_('invalid', 'Одоогийн нууц үг буруу байна.');
+  next = checkPassword_(next, co.email);
+  const found = findCompany_('id', co.id), salt = Utilities.getUuid();
+  setCompanyFields_(found.row, { salt: salt, hash: hash_(next, salt) });
+  return cSession_(found.row, findCompany_('id', co.id).co);
+}
+
+function setCompanyStatus_(id, key) {
+  const status = { active: COMPANY_STATUSES.active, blocked: COMPANY_STATUSES.blocked }[key];
+  if (!status) throw fail_('invalid', 'Буруу төлөв.');
+  return withRow_(COMPANIES, id, (sh, row) => sh.getRange(row, COMPANIES.keys.indexOf('status') + 1).setValue(status));
 }
 
 function apply_(d) {
