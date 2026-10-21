@@ -24,6 +24,7 @@
   <div class="eyebrow">Цагийн ажил</div>
   <h1 style="font-size:1.4rem">Админ нэвтрэх</h1>
   <form id="loginForm" style="display:grid;gap:14px" novalidate>
+    <div class="field"><label for="user">Нэвтрэх нэр</label><input id="user" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
     <div class="field"><label for="pw">Нууц үг</label><input id="pw" type="password" autocomplete="current-password" required></div>
     <div id="loginMsg" hidden></div>
     <button type="submit" class="primary" id="loginBtn">Нэвтрэх</button>
@@ -95,7 +96,7 @@ function showLogin(text) {
   $("loginPanel").hidden = false;
   msg($("loginMsg"), text || "", text ? "err" : "info");
   $("pw").value = "";
-  $("pw").focus();
+  ($("user").value ? $("pw") : $("user")).focus();
 }
 
 async function call(action, data) {
@@ -112,7 +113,7 @@ $("loginForm").addEventListener("submit", async e => {
   const b = $("loginBtn");
   b.disabled = true;
   try {
-    token = (await api("login", { password: $("pw").value })).token;
+    token = (await api("login", { user: $("user").value.trim(), password: $("pw").value })).token;
     store.set(token);
     startApp();
   } catch (err) {

@@ -2,7 +2,7 @@
  * Цагийн ажлын бүртгэл — Google Apps Script backend.
  *
  * Script properties (Project Settings → Script properties):
- *   ADMIN_PASSWORD  заавал. Admin dashboard-ын нууц үг.
+ *   <нэвтрэх нэр>   заавал. Property-ийн нэр = админы нэвтрэх нэр, утга = нууц үг. Хэд хэдэн админ нэмж болно.
  *   NOTIFY_EMAIL    сонголттой. Шинэ анкетын мэдэгдэл очих имэйл. Хоосон бол таны Google имэйл, "off" бол илгээхгүй.
  *   ADMIN_URL       сонголттой. Мэдэгдэл имэйлд оруулах dashboard линк.
  */
@@ -23,12 +23,13 @@ const SHIFTS = ['Өглөө (08–12)', 'Өдөр (12–17)', 'Орой (17–22
 const TYPES = ['Их, дээд сургуулийн оюутан', 'Коллеж, МСҮТ-ийн сурагч', 'Ахлах ангийн сурагч', 'Төгссөн / ажил хайж буй', 'Бусад'];
 const STATUSES = ['Шинэ', 'Холбогдсон', 'Ажилд авсан', 'Татгалзсан'];
 const TOKEN_DAYS = 30;
+const RESERVED = ['NOTIFY_EMAIL', 'ADMIN_URL', 'TOKEN_SECRET', 'JOB'];
 
 /** Нэг удаа ажиллуулна: хүснэгт үүсгээд эрх зөвшөөрүүлнэ. */
 function setup() {
   sheet_();
-  if (!props_().getProperty('ADMIN_PASSWORD')) {
-    throw new Error('Project Settings → Script properties хэсэгт ADMIN_PASSWORD нэмээд дахин ажиллуулна уу.');
+  if (!admins_().length) {
+    throw new Error('Project Settings → Script properties хэсэгт админ нэмнэ үү: Property = нэвтрэх нэр, Value = нууц үг.');
   }
   MailApp.getRemainingDailyQuota();
   Logger.log('Бэлэн. Одоо Deploy → New deployment → Web app хийнэ үү.');
@@ -44,7 +45,7 @@ function doPost(e) {
     switch (p.action) {
       case 'job': return out_({ ok: true, job: job_() });
       case 'apply': return out_(apply_(p.data || {}));
-      case 'login': return out_(login_(p.password));
+      case 'login': return out_(login_(p.user, p.password));
     }
     auth_(p.token);
     switch (p.action) {
@@ -130,38 +131,54 @@ function notify_(a) {
 
 /* ---------- Admin ---------- */
 
-function login_(pw) {
+function login_(user, pw) {
   const cache = CacheService.getScriptCache();
   const fails = Number(cache.get('fails') || 0);
   if (fails >= 5) throw fail_('locked', 'Олон удаа буруу оруулсан тул 10 минут түгжигдлээ.');
-  const real = props_().getProperty('ADMIN_PASSWORD');
-  if (!real) throw fail_('setup', 'ADMIN_PASSWORD тохируулаагүй байна.');
-  if (String(pw || '') !== real) {
+  if (!admins_().length) throw fail_('setup', 'Админ тохируулаагүй байна.');
+  user = String(user || '').trim();
+  const real = adminPassword_(user);
+  if (real === null || String(pw || '') !== real) {
     cache.put('fails', String(fails + 1), 600);
-    throw fail_('auth', 'Нууц үг буруу байна.');
+    throw fail_('auth', 'Нэр эсвэл нууц үг буруу байна.');
   }
   cache.remove('fails');
   const exp = Date.now() + TOKEN_DAYS * 864e5;
-  return { ok: true, token: exp + '.' + sign_(exp) };
+  const u = Utilities.base64EncodeWebSafe(user, Utilities.Charset.UTF_8);
+  return { ok: true, user: user, token: exp + '.' + u + '.' + sign_(exp, user) };
 }
 
 function auth_(token) {
   const parts = String(token || '').split('.');
-  if (parts.length !== 2 || Number(parts[0]) < Date.now() || parts[1] !== sign_(parts[0])) {
+  let user = '';
+  try { user = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1] || '')).getDataAsString('UTF-8'); } catch (e) {}
+  const sig = user && adminPassword_(user) !== null ? sign_(parts[0], user) : null;
+  if (parts.length !== 3 || Number(parts[0]) < Date.now() || !sig || parts[2] !== sig) {
     throw fail_('auth', 'Дахин нэвтэрнэ үү.');
   }
 }
 
-// Нууц үг солигдоход бүх хуучин token хүчингүй болно.
-function sign_(exp) {
+// Property-ийн нэр = нэвтрэх нэр, утга = нууц үг. Тохиргооны нэрс админ биш.
+function admins_() {
+  return Object.keys(props_().getProperties()).filter(k => RESERVED.indexOf(k) < 0);
+}
+
+function adminPassword_(user) {
+  if (!user || RESERVED.indexOf(user) >= 0) return null;
+  const pw = props_().getProperty(user);
+  return pw ? pw : null;
+}
+
+// Нууц үг солигдох эсвэл админ устгагдахад тэр админы token хүчингүй болно.
+function sign_(exp, user) {
   const p = props_();
   let secret = p.getProperty('TOKEN_SECRET');
   if (!secret) {
     secret = Utilities.getUuid() + Utilities.getUuid();
     p.setProperty('TOKEN_SECRET', secret);
   }
-  const key = secret + '|' + (p.getProperty('ADMIN_PASSWORD') || '');
-  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(String(exp), key));
+  const key = secret + '|' + adminPassword_(user);
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(exp + '|' + user, key));
 }
 
 function list_() {
