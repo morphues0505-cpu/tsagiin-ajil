@@ -3,7 +3,7 @@
  *
  * Script properties (Project Settings → Script properties):
  *   <нэвтрэх нэр>   заавал. Property-ийн нэр = админы нэвтрэх нэр, утга = нууц үг. Хэд хэдэн админ нэмж болно.
- *   NOTIFY_EMAIL    сонголттой. Шинэ анкетын мэдэгдэл очих имэйл. Хоосон бол таны Google имэйл, "off" бол илгээхгүй.
+ *   NOTIFY_EMAIL    сонголттой (хуучин). Одоо админ апп-ын Тохиргоо хэсгээс удирдана.
  *   ADMIN_URL       сонголттой. Мэдэгдэл имэйлд оруулах dashboard линк.
  */
 
@@ -23,7 +23,7 @@ const SHIFTS = ['Өглөө (08–12)', 'Өдөр (12–17)', 'Орой (17–22
 const TYPES = ['Их, дээд сургуулийн оюутан', 'Коллеж, МСҮТ-ийн сурагч', 'Ахлах ангийн сурагч', 'Төгссөн / ажил хайж буй', 'Бусад'];
 const STATUSES = ['Шинэ', 'Холбогдсон', 'Ажилд авсан', 'Татгалзсан'];
 const TOKEN_DAYS = 30;
-const RESERVED = ['NOTIFY_EMAIL', 'ADMIN_URL', 'TOKEN_SECRET', 'JOB'];
+const RESERVED = ['NOTIFY_EMAIL', 'ADMIN_URL', 'TOKEN_SECRET', 'JOB', 'CONFIG'];
 
 /** Нэг удаа ажиллуулна: хүснэгт үүсгээд эрх зөвшөөрүүлнэ. */
 function setup() {
@@ -36,23 +36,31 @@ function setup() {
 }
 
 function doGet() {
-  return out_({ ok: true, job: job_() });
+  return out_(public_());
+}
+
+function public_() {
+  const c = config_();
+  return { ok: true, job: job_(), options: { days: c.days, shifts: c.shifts, types: c.types } };
 }
 
 function doPost(e) {
   try {
     const p = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     switch (p.action) {
-      case 'job': return out_({ ok: true, job: job_() });
+      case 'job': return out_(public_());
       case 'apply': return out_(apply_(p.data || {}));
       case 'login': return out_(login_(p.user, p.password));
     }
-    auth_(p.token);
+    const user = auth_(p.token);
     switch (p.action) {
-      case 'list': return out_({ ok: true, rows: list_(), job: job_() });
+      case 'list': return out_({ ok: true, rows: list_(), job: job_(), options: public_().options });
       case 'status': return out_(setStatus_(p.id, p.status));
       case 'delete': return out_(remove_(p.id));
       case 'saveJob': return out_(saveJob_(p.job || {}));
+      case 'getSettings': return out_(getSettings_(user));
+      case 'saveSettings': return out_(saveSettings_(p.settings || {}));
+      case 'changePassword': return out_(changePassword_(user, p.current, p.next));
     }
     throw fail_('bad_action', 'Үл мэдэгдэх үйлдэл.');
   } catch (err) {
@@ -66,12 +74,13 @@ function doPost(e) {
 function apply_(d) {
   if (d.website) return { ok: true, updated: false }; // spam bot-ын хавх
   if (job_().closed) throw fail_('closed', 'Бүртгэл хаагдсан байна.');
+  const c = config_();
   const a = {
     lastName: clean_(d.lastName, 60), firstName: clean_(d.firstName, 60),
     phone: clean_(d.phone, 20), email: clean_(d.email, 100), age: clean_(d.age, 2),
-    type: TYPES.indexOf(d.type) >= 0 ? d.type : '',
+    type: c.types.indexOf(d.type) >= 0 ? d.type : '',
     school: clean_(d.school, 100), major: clean_(d.major, 100),
-    days: pick_(d.days, DAYS), shifts: pick_(d.shifts, SHIFTS),
+    days: pick_(d.days, c.days), shifts: pick_(d.shifts, c.shifts),
     experience: clean_(d.experience, 800), note: clean_(d.note, 800)
   };
   const miss = [];
@@ -109,9 +118,10 @@ function apply_(d) {
 }
 
 function notify_(a) {
-  const p = props_();
-  const to = p.getProperty('NOTIFY_EMAIL') || Session.getEffectiveUser().getEmail();
-  if (!to || to === 'off') return;
+  const p = props_(), c = config_();
+  if (!c.notify) return;
+  const to = c.notifyEmail || Session.getEffectiveUser().getEmail();
+  if (!to) return;
   const url = p.getProperty('ADMIN_URL');
   const body = [
     a.lastName + ' ' + a.firstName + ' (' + a.age + ' нас)',
@@ -143,9 +153,13 @@ function login_(user, pw) {
     throw fail_('auth', 'Нэр эсвэл нууц үг буруу байна.');
   }
   cache.remove('fails');
+  return { ok: true, user: user, token: token_(user) };
+}
+
+function token_(user) {
   const exp = Date.now() + TOKEN_DAYS * 864e5;
   const u = Utilities.base64EncodeWebSafe(user, Utilities.Charset.UTF_8);
-  return { ok: true, user: user, token: exp + '.' + u + '.' + sign_(exp, user) };
+  return exp + '.' + u + '.' + sign_(exp, user);
 }
 
 function auth_(token) {
@@ -156,6 +170,7 @@ function auth_(token) {
   if (parts.length !== 3 || Number(parts[0]) < Date.now() || !sig || parts[2] !== sig) {
     throw fail_('auth', 'Дахин нэвтэрнэ үү.');
   }
+  return user;
 }
 
 // Property-ийн нэр = нэвтрэх нэр, утга = нууц үг. Тохиргооны нэрс админ биш.
@@ -223,6 +238,60 @@ function saveJob_(j) {
   };
   props_().setProperty('JOB', JSON.stringify(job));
   return { ok: true, job: job };
+}
+
+/* ---------- Тохиргоо ---------- */
+
+function config_() {
+  let c = {};
+  try { c = JSON.parse(props_().getProperty('CONFIG') || '{}'); } catch (e) {}
+  const legacy = props_().getProperty('NOTIFY_EMAIL');
+  return {
+    notify: c.notify !== undefined ? c.notify : legacy !== 'off',
+    notifyEmail: c.notifyEmail !== undefined ? c.notifyEmail : (legacy && legacy !== 'off' ? legacy : ''),
+    days: c.days && c.days.length ? c.days : DAYS,
+    shifts: c.shifts && c.shifts.length ? c.shifts : SHIFTS,
+    types: c.types && c.types.length ? c.types : TYPES
+  };
+}
+
+function getSettings_(user) {
+  const c = config_();
+  c.user = user;
+  c.ownerEmail = Session.getEffectiveUser().getEmail();
+  return { ok: true, settings: c };
+}
+
+function saveSettings_(s) {
+  // Өдөр, цагийг Sheet-д ", "-ээр нийлүүлж хадгалдаг тул тэдгээрт таслал хориотой.
+  const list = (v, name, noComma) => {
+    const out = [];
+    (Array.isArray(v) ? v : []).forEach(x => {
+      x = clean_(x, 60);
+      if (noComma) x = x.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+      if (x && out.indexOf(x) < 0) out.push(x);
+    });
+    if (!out.length) throw fail_('invalid', name + ' хоосон байж болохгүй.');
+    if (out.length > 14) throw fail_('invalid', name + ' 14-өөс олон байж болохгүй.');
+    return out;
+  };
+  const email = clean_(s.notifyEmail, 100);
+  if (email && !/^\S+@\S+\.\S+$/.test(email)) throw fail_('invalid', 'Имэйл хаяг буруу байна.');
+  const c = {
+    notify: s.notify === true, notifyEmail: email,
+    days: list(s.days, 'Өдрүүд', true), shifts: list(s.shifts, 'Цаг', true), types: list(s.types, '"Та хэн бэ" сонголт')
+  };
+  props_().setProperty('CONFIG', JSON.stringify(c));
+  return getSettings_('');
+}
+
+function changePassword_(user, current, next) {
+  if (adminPassword_(user) !== String(current || '')) throw fail_('invalid', 'Одоогийн нууц үг буруу байна.');
+  next = String(next || '');
+  if (next.length < 8) throw fail_('invalid', 'Шинэ нууц үг 8-аас дээш тэмдэгттэй байна.');
+  if (next === user) throw fail_('invalid', 'Нууц үг нэвтрэх нэртэйгээ ижил байж болохгүй.');
+  props_().setProperty(user, next);
+  return { ok: true, token: token_(user) };
 }
 
 /* ---------- Туслах ---------- */

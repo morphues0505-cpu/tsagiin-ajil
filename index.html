@@ -70,9 +70,15 @@
 <script src="config.js"></script>
 <script src="common.js"></script>
 <script>
-chips($("dayChips"), DAY_FULL, "day");
-chips($("shiftChips"), SHIFTS, "shift");
-TYPES.forEach(t => $("f_type").add(new Option(t, t)));
+function renderOptions(o) {
+  o = o || {};
+  $("dayChips").textContent = "";
+  $("shiftChips").textContent = "";
+  $("f_type").length = 1;
+  chips($("dayChips"), o.days || DAY_FULL, "day");
+  chips($("shiftChips"), o.shifts || SHIFTS, "shift");
+  (o.types || TYPES).forEach(t => $("f_type").add(new Option(t, t)));
+}
 const checked = box => [...box.querySelectorAll("input:checked")].map(i => i.value);
 
 function renderJob(job) {
@@ -145,7 +151,9 @@ $("againBtn").onclick = () => {
 (async () => {
   if (!apiReady()) { msg($("status"), "Тохиргоо дутуу: config.js-д API_URL оруулна уу.", "err"); return; }
   try {
-    renderJob((await api("job")).job || {});
+    const r = await api("job");
+    renderOptions(r.options);
+    renderJob(r.job || {});
   } catch (err) {
     msg($("status"), "Ачаалж чадсангүй. " + err.message, "err");
   }
