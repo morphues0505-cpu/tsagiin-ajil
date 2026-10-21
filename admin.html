@@ -118,6 +118,20 @@
     </section>
 
     <section class="panel">
+      <h2>Админууд</h2>
+      <ul class="admins" id="adminList"></ul>
+      <form id="addAdminForm" novalidate style="display:grid;gap:14px">
+        <div class="grid2">
+          <div class="field"><label for="a_name">Шинэ админы нэвтрэх нэр</label><input id="a_name" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="30" placeholder="bat.erdene"></div>
+          <div class="field"><label for="a_pw">Нууц үг</label><input id="a_pw" type="password" autocomplete="new-password" minlength="8"></div>
+        </div>
+        <span class="hint">Латин үсэг, тоо, . _ - ашиглана. Нууц үг 8-аас дээш тэмдэгт. Шинэ админдаа нэр, нууц үгээ өөрөө дамжуулна.</span>
+        <div class="row"><button type="submit" class="primary" id="addAdminBtn">Админ нэмэх</button><span id="adminsMsg" class="hint" role="status"></span></div>
+      </form>
+      <p class="hint" id="adminsFull" style="margin:0" hidden></p>
+    </section>
+
+    <section class="panel">
       <h2>Харагдах байдал</h2>
       <div class="grid2">
         <div class="field"><label for="v_theme">Өнгө</label>
@@ -399,6 +413,7 @@ async function loadSettings() {
     $("n_email").placeholder = settings.ownerEmail || "";
     $("n_hint").textContent = "Хоосон бол " + (settings.ownerEmail || "таны Google имэйл") + " руу очно.";
     $("whoami").textContent = settings.user;
+    renderAdmins(settings.admins);
     $("pw_user").value = settings.user;
     msg($("settingsMsg"), "");
   } catch (err) {
@@ -452,6 +467,64 @@ $("pwForm").addEventListener("submit", async e => {
     $("pwForm").reset();
     $("pw_user").value = settings ? settings.user : "";
     out.textContent = "Нууц үг солигдлоо";
+  } catch (err) {
+    out.textContent = err.message;
+  } finally {
+    b.disabled = false;
+  }
+});
+
+function renderAdmins(list) {
+  settings.admins = list;
+  const ul = $("adminList");
+  ul.textContent = "";
+  list.forEach(name => {
+    const li = el("li", "admin-row");
+    const label = el("span", null, name);
+    if (name === settings.user) label.append(el("span", "sub", " (та)"));
+    li.append(label);
+    if (name !== settings.user && list.length > 1) {
+      const del = el("button", "danger small", "Устгах");
+      del.type = "button";
+      del.setAttribute("aria-label", name + " админыг устгах");
+      del.onclick = async () => {
+        if (!del.dataset.confirm) {
+          del.dataset.confirm = "1";
+          del.textContent = "Итгэлтэй юу?";
+          setTimeout(() => { if (del.isConnected) { delete del.dataset.confirm; del.textContent = "Устгах"; } }, 4000);
+          return;
+        }
+        del.disabled = true;
+        try {
+          renderAdmins((await call("removeAdmin", { name })).admins);
+          $("adminsMsg").textContent = name + " устгагдлаа";
+        } catch (err) {
+          del.disabled = false;
+          $("adminsMsg").textContent = err.message;
+        }
+      };
+      li.append(del);
+    }
+    ul.append(li);
+  });
+  const full = list.length >= settings.maxAdmins;
+  $("addAdminForm").hidden = full;
+  $("adminsFull").hidden = !full;
+  $("adminsFull").textContent = `Хамгийн ихдээ ${settings.maxAdmins} админ байна. Шинээр нэмэх бол нэгийг нь устгана.`;
+}
+
+$("addAdminForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const out = $("adminsMsg"), b = $("addAdminBtn");
+  const name = $("a_name").value.trim(), pw = $("a_pw").value;
+  if (!/^[A-Za-z0-9._-]{3,30}$/.test(name)) { out.textContent = "Нэвтрэх нэр 3–30 тэмдэгт, латин үсэг, тоо, . _ - байна."; return; }
+  if (pw.length < 8) { out.textContent = "Нууц үг 8-аас дээш тэмдэгттэй байна."; return; }
+  b.disabled = true;
+  out.textContent = "";
+  try {
+    renderAdmins((await call("addAdmin", { name, password: pw })).admins);
+    $("addAdminForm").reset();
+    out.textContent = name + " нэмэгдлээ";
   } catch (err) {
     out.textContent = err.message;
   } finally {

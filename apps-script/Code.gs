@@ -25,6 +25,7 @@ const GENDERS = ['Эрэгтэй', 'Эмэгтэй'];
 const GENDER_MODES = ['off', 'optional', 'required'];
 const STATUSES = ['Шинэ', 'Холбогдсон', 'Ажилд авсан', 'Татгалзсан'];
 const TOKEN_DAYS = 30;
+const MAX_ADMINS = 4;
 const RESERVED = ['NOTIFY_EMAIL', 'ADMIN_URL', 'TOKEN_SECRET', 'JOB', 'CONFIG'];
 
 /** Нэг удаа ажиллуулна: хүснэгт үүсгээд эрх зөвшөөрүүлнэ. */
@@ -63,6 +64,8 @@ function doPost(e) {
       case 'getSettings': return out_(getSettings_(user));
       case 'saveSettings': return out_(saveSettings_(p.settings || {}));
       case 'changePassword': return out_(changePassword_(user, p.current, p.next));
+      case 'addAdmin': return out_(addAdmin_(p.name, p.password));
+      case 'removeAdmin': return out_(removeAdmin_(user, p.name));
     }
     throw fail_('bad_action', 'Үл мэдэгдэх үйлдэл.');
   } catch (err) {
@@ -265,6 +268,8 @@ function getSettings_(user) {
   const c = config_();
   c.user = user;
   c.ownerEmail = Session.getEffectiveUser().getEmail();
+  c.admins = admins_().sort();
+  c.maxAdmins = MAX_ADMINS;
   return { ok: true, settings: c };
 }
 
@@ -300,6 +305,45 @@ function changePassword_(user, current, next) {
   if (next === user) throw fail_('invalid', 'Нууц үг нэвтрэх нэртэйгээ ижил байж болохгүй.');
   props_().setProperty(user, next);
   return { ok: true, token: token_(user) };
+}
+
+function addAdmin_(name, password) {
+  name = String(name || '').trim();
+  password = String(password || '');
+  if (!/^[A-Za-z0-9._-]{3,30}$/.test(name)) {
+    throw fail_('invalid', 'Нэвтрэх нэр 3–30 тэмдэгт, зөвхөн латин үсэг, тоо, . _ - байна.');
+  }
+  if (RESERVED.some(r => r.toLowerCase() === name.toLowerCase())) throw fail_('invalid', 'Энэ нэрийг ашиглах боломжгүй.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const list = admins_();
+    if (list.some(a => a.toLowerCase() === name.toLowerCase())) throw fail_('invalid', 'Ийм нэртэй админ байна.');
+    if (list.length >= MAX_ADMINS) throw fail_('invalid', 'Хамгийн ихдээ ' + MAX_ADMINS + ' админ байна.');
+    if (password.length < 8) throw fail_('invalid', 'Нууц үг 8-аас дээш тэмдэгттэй байна.');
+    if (password === name) throw fail_('invalid', 'Нууц үг нэвтрэх нэртэйгээ ижил байж болохгүй.');
+    props_().setProperty(name, password);
+    return { ok: true, admins: admins_().sort() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Устгагдсан админы token дараагийн хүсэлтэд хүчингүй болно (adminPassword_ null буцаана).
+function removeAdmin_(user, name) {
+  name = String(name || '');
+  if (name === user) throw fail_('invalid', 'Өөрийгөө устгах боломжгүй.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const list = admins_();
+    if (list.indexOf(name) < 0) throw fail_('not_found', 'Админ олдсонгүй.');
+    if (list.length <= 1) throw fail_('invalid', 'Сүүлчийн админыг устгах боломжгүй.');
+    props_().deleteProperty(name);
+    return { ok: true, admins: admins_().sort() };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /* ---------- Туслах ---------- */
